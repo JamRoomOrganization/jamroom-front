@@ -15,10 +15,6 @@ export default function RoomCard({ room }: { room: RoomType & { participants?: n
         </div>
       </div>
       
-      <p className="text-slate-400 text-sm mb-6 line-clamp-2">
-        {room.description || "Sala de colaboración musical en tiempo real"}
-      </p>
-      
       <div className="flex items-center justify-between">
         <div className="flex -space-x-2">
           {[...Array(Math.min(3, room.participants || 0))].map((_, i) => (
