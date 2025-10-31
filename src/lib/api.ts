@@ -1,0 +1,52 @@
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+
+type FetchOptions = {
+  method?: HttpMethod;
+  body?: unknown;
+  headers?: Record<string, string>;
+  auth?: boolean; // incluye Authorization si hay token
+  withCredentials?: boolean; // usa cookies (include)
+};
+
+export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
+  const url = `${API_BASE_URL}${path}`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+  };
+
+  if (options.auth) {
+    const token = typeof window !== "undefined" ? localStorage.getItem("jr_token") : null;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(url, {
+    method: options.method || "POST",
+    headers,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+    credentials: options.withCredentials ? "include" : "omit",
+  });
+
+  const isJson = res.headers.get("content-type")?.includes("application/json");
+  const data = isJson ? await res.json() : (null as unknown as T);
+
+  if (!res.ok) {
+    const message = (data as { message?: string } | null)?.message || `HTTP ${res.status}`;
+    throw new Error(message);
+  }
+
+  return data as T;
+}
+
+export const api = {
+  get: <T>(path: string, auth = false) => apiFetch<T>(path, { method: "GET", auth }),
+  post: <T>(path: string, body?: unknown, auth = false) => apiFetch<T>(path, { method: "POST", body, auth }),
+  put: <T>(path: string, body?: unknown, auth = false) => apiFetch<T>(path, { method: "PUT", body, auth }),
+  patch: <T>(path: string, body?: unknown, auth = false) => apiFetch<T>(path, { method: "PATCH", body, auth }),
+  delete: <T>(path: string, auth = false) => apiFetch<T>(path, { method: "DELETE", auth }),
+};
+
+

@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Header() {
+  const { user, signOut } = useAuth();
   return (
     <header className="bg-slate-800/95 backdrop-blur-sm border-b border-slate-700 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -18,9 +20,18 @@ export default function Header() {
             <Link href="#" className="text-slate-300 hover:text-white transition-colors duration-200 font-medium hover:scale-105">
               Docs
             </Link>
-            <Link href="#" className="text-slate-300 hover:text-white transition-colors duration-200 font-medium hover:scale-105">
-              Perfil
-            </Link>
+            {user ? (
+              <>
+                <span className="text-slate-300">Hola, {user.name || user.email}</span>
+                <button onClick={signOut} className="text-slate-300 hover:text-white transition-colors duration-200 font-medium hover:scale-105">
+                  Salir
+                </button>
+              </>
+            ) : (
+              <Link href="/login" className="text-slate-300 hover:text-white transition-colors duration-200 font-medium hover:scale-105">
+                Iniciar sesión
+              </Link>
+            )}
             <button className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white px-6 py-2 rounded-full font-medium transition-all duration-200 hover:scale-105 hover:shadow-lg">
               Crear Sala
             </button>
