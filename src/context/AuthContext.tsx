@@ -35,24 +35,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Cargar sesión si existe token
-    const token = typeof window !== "undefined" ? localStorage.getItem("jr_token") : null;
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+    // Intentar cargar sesión; el backend debe verificar la cookie HTTP-only
     fetchMe();
   }, [fetchMe]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    // Espera que el backend devuelva { token: string }
-    const { token } = await api.post<{ token: string }>("/api/auth/login", { email, password });
-    localStorage.setItem("jr_token", token);
+    // Espera que el backend establezca la cookie HTTP-only con el token
+    await api.post("/api/auth/login", { email, password });
+    // La cookie HTTP-only será enviada automáticamente en futuras peticiones
     // await fetchMe();
   }, [/*fetchMe*/]);
 
-  const signOut = useCallback(() => {
-    localStorage.removeItem("jr_token");
+  const signOut = useCallback(async () => {
+    // Llamar al backend para eliminar la cookie HTTP-only
+    await api.post("/api/auth/logout");
     setUser(null);
   }, []);
 
