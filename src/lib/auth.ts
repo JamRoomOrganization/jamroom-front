@@ -10,7 +10,7 @@ export async function signInWithEmail(
   // Simulación de delay de red
   await new Promise((resolve) => setTimeout(resolve, 800));
 
-  const isEmailValid = /.+@.+\..+/.test(email);
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const isPasswordValid = password.length >= 6;
 
   if (!isEmailValid) {
