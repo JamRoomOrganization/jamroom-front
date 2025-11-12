@@ -30,7 +30,7 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   }
 
   const res = await fetch(url, {
-    method: options.method || "POST",
+    method: options.method || "GET",
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
     credentials: options.withCredentials ? "include" : "omit",
