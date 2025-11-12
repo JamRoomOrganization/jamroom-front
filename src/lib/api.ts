@@ -1,18 +1,19 @@
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-// If NEXT_PUBLIC_API_BASE_URL is not set, fallback to empty string for same-origin requests (e.g., during local development).
+// Si NEXT_PUBLIC_API_BASE_URL no está definida, usa string vacío
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
-// In production, require API_BASE_URL to be set to avoid confusion or unexpected behavior.
-if (process.env.NODE_ENV === "production" && !API_BASE_URL) {
+// Solo lanzar error en cliente en producción, no durante el build
+if (typeof window !== "undefined" && process.env.NODE_ENV === "production" && !API_BASE_URL) {
   throw new Error("NEXT_PUBLIC_API_BASE_URL environment variable must be set in production.");
 }
+
 type FetchOptions = {
   method?: HttpMethod;
   body?: unknown;
   headers?: Record<string, string>;
-  auth?: boolean; // incluye Authorization si hay token
-  withCredentials?: boolean; // usa cookies (include)
+  auth?: boolean;
+  withCredentials?: boolean;
 };
 
 export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
@@ -53,5 +54,3 @@ export const api = {
   patch: <T>(path: string, body?: unknown, auth = false) => apiFetch<T>(path, { method: "PATCH", body, auth }),
   delete: <T>(path: string, auth = false) => apiFetch<T>(path, { method: "DELETE", auth }),
 };
-
-
