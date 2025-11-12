@@ -1,13 +1,13 @@
-import Link from 'next/link';
-import { useAuth } from '@/context/AuthContext';
+import Link from "next/link";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Header() {
   const { user, signOut } = useAuth();
   return (
-    <header className="bg-slate-800/95 backdrop-blur-sm border-b border-slate-700 sticky top-0 z-50">
+    <header className="bg-slate-900/90 backdrop-blur-sm border-b border-slate-800 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <Link href="/" className="flex items-center space-x-3 group">
+          <Link href="/" className="flex items-center gap-3 group">
             <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg flex items-center justify-center shadow-lg">
               <span className="text-white font-bold text-lg">J</span>
             </div>
@@ -15,29 +15,36 @@ export default function Header() {
               JamRoom
             </span>
           </Link>
-          
-          <nav className="flex items-center space-x-6">
-            <Link href="#" className="text-slate-300 hover:text-white transition-colors duration-200 font-medium hover:scale-105">
+
+          <nav className="flex items-center gap-6">
+            <Link href="#" className="text-slate-300 hover:text-white transition-colors font-medium">
               Docs
             </Link>
             {user ? (
               <>
-                <span className="text-slate-300">Hola, {user.name || user.email}</span>
-                <button onClick={signOut} className="text-slate-300 hover:text-white transition-colors duration-200 font-medium hover:scale-105">
+                <span className="hidden sm:block text-slate-300">Hola, {user.name || user.email}</span>
+                <button
+                  onClick={signOut}
+                  className="text-slate-300 hover:text-white transition-colors font-medium"
+                >
                   Salir
                 </button>
               </>
             ) : (
-              <Link href="/login" className="text-slate-300 hover:text-white transition-colors duration-200 font-medium hover:scale-105">
+              <Link href="/login" className="text-slate-300 hover:text-white transition-colors font-medium">
                 Iniciar sesión
               </Link>
             )}
-            <button className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white px-6 py-2 rounded-full font-medium transition-all duration-200 hover:scale-105 hover:shadow-lg">
-              Crear Sala
-            </button>
+            <Link
+              href="/create"
+              className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white px-4 md:px-6 py-2 rounded-full font-medium transition-all hover:scale-[1.02]"
+            >
+              Crear sala
+            </Link>
           </nav>
         </div>
       </div>
     </header>
   );
 }
+

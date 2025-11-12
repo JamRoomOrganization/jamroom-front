@@ -2,19 +2,26 @@
 
 import React from "react";
 import Header from "../../../components/Header";
-import PlayerMock from "../../../components/PlayerMock";
+import PlayerNow from "../../../components/PlayerNow";
 import QueueList from "../../../components/QueueList";
-import ChatMock from "../../../components/ChatMock";
+import ChatPanel from "../../../components/ChatPanel";
 import ParticipantsList from "../../../components/ParticipantsList";
 import { useRoom } from "../../../hooks/useRoom";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
+import InviteDialog from "../../../components/InviteDialog";
+import AddSongDialog from "../../../components/AddSongDialog";
 
-export default function RoomPage({ params }: { params: Promise<{ id: string }> }) {
+type PageParams = { params: { id: string } };
+
+export default function RoomPage({ params }: PageParams) {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const { id } = React.use(params);
+  const { id } = params;
   const { room, loading, skipTrack } = useRoom(id);
+
+  const [inviteOpen, setInviteOpen] = React.useState(false);
+  const [addOpen, setAddOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (!authLoading && !user) {
@@ -22,70 +29,86 @@ export default function RoomPage({ params }: { params: Promise<{ id: string }> }
     }
   }, [authLoading, user, router]);
 
-  if (!user && !authLoading) {
-    return null;
+  if (!user && !authLoading) return null;
+
+  if (loading || authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white text-lg">Cargando sala…</p>
+        </div>
+      </div>
+    );
   }
 
-  if (loading || authLoading) return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-white text-lg">Cargando...</p>
-      </div>
-    </div>
-  );
+  const current = room?.queue?.[0];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950">
       <Header />
-      
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-white mb-2">
-                {room?.name}
+        {/* Encabezado de sala */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="text-3xl md:text-4xl font-bold text-white truncate">
+                {room?.name ?? "Sala"}
               </h1>
-              <p className="text-slate-400 text-lg">
-                Sala de colaboración musical
-              </p>
+              <div className="mt-1 flex items-center gap-3 text-sm text-slate-400">
+                <span>Sala de colaboración musical</span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  sincronizada
+                </span>
+                {!!room?.participants?.length && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-200 border border-slate-600">
+                    <svg width="14" height="14" viewBox="0 0 24 24" className="opacity-80"><path fill="currentColor" d="M12 12a5 5 0 1 0-5-5a5 5 0 0 0 5 5m-7 8a7 7 0 0 1 14 0z"/></svg>
+                    {room.participants.length}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center space-x-4">
-              <button className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-6 py-3 rounded-full font-medium transition-all duration-200 hover:scale-105">
-                Invitar Amigos
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setInviteOpen(true)}
+                className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-4 md:px-6 py-2.5 rounded-full font-medium transition-all duration-200 hover:scale-[1.02]"
+              >
+                Invitar
               </button>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Grid principal */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="lg:col-span-2 space-y-6">
-            <PlayerMock track={room?.queue?.[0]} />
-            
-            <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50">
-              <h3 className="text-xl font-bold text-white mb-4">Controles</h3>
-              <div className="flex gap-4">
-                <button className="flex-1 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 hover:scale-105">
-                  Añadir Canción
-                </button>
-                <button 
-                  onClick={() => skipTrack()} 
-                  className="flex-1 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 hover:scale-105"
-                >
-                  Siguiente Canción
-                </button>
-              </div>
-            </div>
-            
-            <QueueList queue={room?.queue} />
+            <PlayerNow
+              track={current}
+              // Stubs (si tu hook expone play/pause/seek, pásalos aquí)
+              onAddClick={() => setAddOpen(true)}
+              onSkipClick={() => skipTrack()}
+            />
+
+            <QueueList
+              queue={room?.queue}
+              onAddClick={() => setAddOpen(true)}
+              onSkipClick={() => skipTrack()}
+            />
           </div>
 
           <aside className="space-y-6">
             <ParticipantsList participants={room?.participants} />
-            <ChatMock />
+            <ChatPanel />
           </aside>
         </div>
       </main>
+
+      {/* Diálogos */}
+      <InviteDialog open={inviteOpen} onOpenChange={setInviteOpen} roomId={id} />
+      <AddSongDialog open={addOpen} onOpenChange={setAddOpen} roomId={id} />
     </div>
   );
 }
