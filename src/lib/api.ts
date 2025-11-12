@@ -1,7 +1,12 @@
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+// If NEXT_PUBLIC_API_BASE_URL is not set, fallback to empty string for same-origin requests (e.g., during local development).
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
+// In production, require API_BASE_URL to be set to avoid confusion or unexpected behavior.
+if (process.env.NODE_ENV === "production" && !API_BASE_URL) {
+  throw new Error("NEXT_PUBLIC_API_BASE_URL environment variable must be set in production.");
+}
 type FetchOptions = {
   method?: HttpMethod;
   body?: unknown;
