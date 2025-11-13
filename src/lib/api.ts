@@ -1,7 +1,6 @@
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-// Si NEXT_PUBLIC_API_BASE_URL no está definida, usa string vacío
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001";
 
 // Solo lanzar error en cliente en producción, no durante el build
 if (typeof window !== "undefined" && process.env.NODE_ENV === "production" && !API_BASE_URL) {
@@ -9,7 +8,7 @@ if (typeof window !== "undefined" && process.env.NODE_ENV === "production" && !A
 }
 
 type FetchOptions = {
-  method?: HttpMethod;
+  method?: HttpMethod;  
   body?: unknown;
   headers?: Record<string, string>;
   auth?: boolean;

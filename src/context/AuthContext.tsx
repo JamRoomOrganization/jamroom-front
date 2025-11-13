@@ -1,13 +1,19 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { api } from "@/lib/api";
 
 export type AuthUser = {
   id: string;
   email: string;
   name?: string;
-  avatarUrl?: string;
 };
 
 type AuthContextType = {
@@ -19,40 +25,98 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+type LoginResponse = {
+  idToken: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+};
+
+function parseJwt(token: string): any {
+  const base64Url = token.split(".")[1];
+  const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+  const jsonPayload = decodeURIComponent(
+    atob(base64)
+      .split("")
+      .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+      .join("")
+  );
+  return JSON.parse(jsonPayload);
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // 👇 IMPORTANTE: mismo valor inicial en server y cliente
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchMe = useCallback(async () => {
+  // Hidratamos desde localStorage SOLO en el cliente, DESPUÉS de la hidratación
+  useEffect(() => {
     try {
-      const me = await api.get<AuthUser>("/auth/me", true);
-      setUser(me);
+      const idToken = localStorage.getItem("idToken");
+      if (!idToken) {
+        setLoading(false);
+        return;
+      }
+
+      const payload = parseJwt(idToken);
+      setUser({
+        id: payload.sub,
+        email: payload.email ?? "",
+        name:
+          payload.name ??
+          payload["cognito:username"] ??
+          payload.username ??
+          undefined,
+      });
     } catch {
-      setUser(null);
+      // si hay basura en localStorage, limpiamos
+      localStorage.removeItem("idToken");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    // Intentar cargar sesión; el backend debe verificar la cookie HTTP-only
-    fetchMe();
-  }, [fetchMe]);
-
   const signIn = useCallback(async (email: string, password: string) => {
-    // Espera que el backend establezca la cookie HTTP-only con el token
-    await api.post("/api/auth/login", { email, password });
-    // La cookie HTTP-only será enviada automáticamente en futuras peticiones
-    // await fetchMe();
-  }, [/*fetchMe*/]);
+    setLoading(true);
+    try {
+      const tokens = await api.post<LoginResponse>("/auth/login", {
+        email,
+        password,
+      });
 
-  const signOut = useCallback(async () => {
-    // Llamar al backend para eliminar la cookie HTTP-only
-    await api.post("/api/auth/logout");
+      localStorage.setItem("idToken", tokens.idToken);
+      localStorage.setItem("accessToken", tokens.accessToken);
+      localStorage.setItem("refreshToken", tokens.refreshToken);
+
+      const payload = parseJwt(tokens.idToken);
+
+      setUser({
+        id: payload.sub,
+        email: payload.email ?? email,
+        name:
+          payload.name ??
+          payload["cognito:username"] ??
+          payload.username ??
+          undefined,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const signOut = useCallback(() => {
+    localStorage.removeItem("idToken");
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, loading, signIn, signOut }), [user, loading, signIn, signOut]);
+  const value = useMemo(
+    () => ({ user, loading, signIn, signOut }),
+    [user, loading, signIn, signOut]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -62,5 +126,6 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth debe usarse dentro de AuthProvider");
   return ctx;
 }
+
 
 

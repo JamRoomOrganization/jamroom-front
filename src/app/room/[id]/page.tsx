@@ -12,12 +12,16 @@ import { useRouter } from "next/navigation";
 import InviteDialog from "../../../components/InviteDialog";
 import AddSongDialog from "../../../components/AddSongDialog";
 
-type PageParams = { params: { id: string } };
+type PageProps = {
+  params: Promise<{ id: string }>;
+};
 
-export default function RoomPage({ params }: PageParams) {
+export default function RoomPage({ params }: PageProps) {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const { id } = params;
+
+  const { id } = React.use(params);
+
   const { room, loading, skipTrack } = useRoom(id);
 
   const [inviteOpen, setInviteOpen] = React.useState(false);
@@ -64,7 +68,17 @@ export default function RoomPage({ params }: PageParams) {
                 </span>
                 {!!room?.participants?.length && (
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-200 border border-slate-600">
-                    <svg width="14" height="14" viewBox="0 0 24 24" className="opacity-80"><path fill="currentColor" d="M12 12a5 5 0 1 0-5-5a5 5 0 0 0 5 5m-7 8a7 7 0 0 1 14 0z"/></svg>
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      className="opacity-80"
+                    >
+                      <path
+                        fill="currentColor"
+                        d="M12 12a5 5 0 1 0-5-5a5 5 0 0 0 5 5m-7 8a7 7 0 0 1 14 0z"
+                      />
+                    </svg>
                     {room.participants.length}
                   </span>
                 )}
@@ -87,7 +101,6 @@ export default function RoomPage({ params }: PageParams) {
           <div className="lg:col-span-2 space-y-6">
             <PlayerNow
               track={current}
-              // Stubs (si tu hook expone play/pause/seek, pásalos aquí)
               onAddClick={() => setAddOpen(true)}
               onSkipClick={() => skipTrack()}
             />
