@@ -1,10 +1,10 @@
 import Link from "next/link";
 import RoomCard from "../RoomCard";
-import type { RoomWithStats } from "../../lib/mockApi";
+import type { LobbyRoom } from "../../types";
 import { RoomsSkeleton } from "./RoomsSkeleton";
 
 type RoomsSectionProps = {
-  rooms: RoomWithStats[];
+  rooms: LobbyRoom[];
   loading: boolean;
   error: string | null;
 };
