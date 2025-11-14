@@ -36,17 +36,13 @@ export default function Home() {
     };
   }, []);
 
-  const handleScrollToRooms = () => {
-    const el = document.getElementById("rooms-section");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <HomeHero onScrollToRooms={handleScrollToRooms} />
+        <HomeHero/>
         <RoomsSection rooms={rooms} loading={loading} error={error} />
       </main>
     </div>

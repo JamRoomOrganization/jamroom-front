@@ -103,7 +103,7 @@ export const CreateRoomForm: React.FC<CreateRoomFormProps> = ({
           value={initialTrackId}
           onChange={(e) => setInitialTrackId(e.target.value)}
           className="w-full px-3 py-2.5 rounded-lg bg-slate-800/80 border border-slate-700 text-slate-100 placeholder:text-slate-500 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-          placeholder="Pega aquí el trackId de Audius u otra fuente"
+          placeholder="Pega aquí el trackId de Audius (p. ej. 123456789)"
         />
       </div>
 
