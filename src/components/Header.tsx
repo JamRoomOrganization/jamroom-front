@@ -20,12 +20,7 @@ export default function Header() {
           </Link>
 
           <nav className="flex items-center gap-6">
-            <Link
-              href="#"
-              className="text-slate-300 hover:text-white transition-colors font-medium"
-            >
-              Docs
-            </Link>
+
             {!loading && (
               <>
                 {user ? (
