@@ -28,12 +28,6 @@ export default function Header() {
                     <span className="hidden sm:block text-slate-300">
                       Hola, {user.name || user.email}
                     </span>
-                    <button
-                      onClick={signOut}
-                      className="text-slate-300 hover:text-white transition-colors font-medium"
-                    >
-                      Salir
-                    </button>
                   </>
                 ) : (
                   <Link
@@ -52,6 +46,12 @@ export default function Header() {
             >
               Crear sala
             </Link>
+            <button
+              onClick={signOut}
+              className="text-slate-300 hover:text-white transition-colors font-medium"
+            >
+              Salir
+            </button>
           </nav>
         </div>
       </div>

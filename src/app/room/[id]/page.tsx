@@ -11,6 +11,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import InviteDialog from "../../../components/InviteDialog";
 import AddSongDialog from "../../../components/AddSongDialog";
+import { useRoomMembers } from "../../../hooks/useRoomMembers";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -20,12 +21,20 @@ export default function RoomPage({ params }: PageProps) {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
+  // 👇 aquí está la clave para quitar el warning de Next
   const { id } = React.use(params);
 
   const { room, loading, skipTrack } = useRoom(id);
 
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
+
+  // Carga de miembros reales desde queue-service
+  const {
+    members,
+    loading: membersLoading,
+    error: membersError,
+  } = useRoomMembers(id);
 
   React.useEffect(() => {
     if (!authLoading && !user) {
@@ -48,6 +57,20 @@ export default function RoomPage({ params }: PageProps) {
 
   const current = room?.queue?.[0];
 
+  const participantsFromMembers = members.map((m) => ({
+    id: m.user_id,
+    name: m.user_id,
+    roles: m.roles,
+    canControlPlayback: m.can_control_playback,
+    canAddTracks: m.can_add_tracks,
+    canInvite: m.can_invite,
+  }));
+
+  const participants =
+    participantsFromMembers.length > 0
+      ? participantsFromMembers
+      : room?.participants ?? [];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950">
       <Header />
@@ -66,7 +89,7 @@ export default function RoomPage({ params }: PageProps) {
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   sincronizada
                 </span>
-                {!!room?.participants?.length && (
+                {!!participants.length && (
                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-200 border border-slate-600">
                     <svg
                       width="14"
@@ -79,7 +102,7 @@ export default function RoomPage({ params }: PageProps) {
                         d="M12 12a5 5 0 1 0-5-5a5 5 0 0 0 5 5m-7 8a7 7 0 0 1 14 0z"
                       />
                     </svg>
-                    {room.participants.length}
+                    {participants.length}
                   </span>
                 )}
               </div>
@@ -94,6 +117,12 @@ export default function RoomPage({ params }: PageProps) {
               </button>
             </div>
           </div>
+
+          {membersError && (
+            <p className="mt-2 text-xs text-red-400">
+              {membersError}
+            </p>
+          )}
         </div>
 
         {/* Grid principal */}
@@ -113,15 +142,18 @@ export default function RoomPage({ params }: PageProps) {
           </div>
 
           <aside className="space-y-6">
-            <ParticipantsList participants={room?.participants} />
+            <ParticipantsList
+              participants={participants}
+            />
             <ChatPanel />
           </aside>
         </div>
       </main>
 
-      {/* Diálogos */}
       <InviteDialog open={inviteOpen} onOpenChange={setInviteOpen} roomId={id} />
       <AddSongDialog open={addOpen} onOpenChange={setAddOpen} roomId={id} />
     </div>
   );
 }
+
+

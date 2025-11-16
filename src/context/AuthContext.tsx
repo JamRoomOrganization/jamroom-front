@@ -90,6 +90,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("accessToken", tokens.accessToken);
       localStorage.setItem("refreshToken", tokens.refreshToken);
 
+      localStorage.setItem("jr_token", tokens.accessToken);
+
       const payload = parseJwt(tokens.idToken);
 
       setUser({
@@ -110,6 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("idToken");
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
+    localStorage.removeItem("jr_token"); 
     setUser(null);
   }, []);
 

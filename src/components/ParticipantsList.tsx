@@ -2,9 +2,13 @@ import React from "react";
 
 type Participant = { id: string; name: string; role?: string };
 
-function initials(name: string) {
-  const parts = name.split(" ").filter(Boolean);
-  return (parts[0]?.[0] ?? "").concat(parts[1]?.[0] ?? "").toUpperCase() || "U";
+function initials(name?: string) {
+  const safe = (name ?? "").trim() || "Usuario";
+  const parts = safe.split(" ").filter(Boolean);
+  const first = parts[0]?.[0] ?? "";
+  const second = parts[1]?.[0] ?? "";
+  const result = (first + second).toUpperCase();
+  return result || "U";
 }
 
 export default function ParticipantsList({ participants = [] }: { participants?: Participant[] }) {
@@ -19,7 +23,7 @@ export default function ParticipantsList({ participants = [] }: { participants?:
             <li key={p.id} className="flex items-center justify-between">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-blue-400 flex items-center justify-center text-xs text-white border border-slate-700/50">
-                  {initials(p.name)}
+                  {initials(p.name ?? p.id)}
                 </div>
                 <div className="min-w-0">
                   <div className="text-sm text-slate-100 truncate">{p.name}</div>
