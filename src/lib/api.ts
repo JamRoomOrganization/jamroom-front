@@ -28,26 +28,42 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, {
-    method: options.method || "GET",
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-    credentials: options.withCredentials ? "include" : "omit",
-  });
+  try {
+    const res = await fetch(url, {
+      method: options.method || "GET",
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      credentials: options.withCredentials ? "include" : "omit",
+    });
 
-  const isJson = res.headers.get("content-type")?.includes("application/json");
-  const data = isJson ? await res.json() : (null as unknown as T);
+    const isJson = res.headers.get("content-type")?.includes("application/json");
+    const data = isJson ? await res.json() : (null as unknown as T);
 
-  if (!res.ok) {
-    const message = (data as { message?: string } | null)?.message || `HTTP ${res.status}`;
-    throw new Error(message);
+    if (!res.ok) {
+      const message = (data as { message?: string } | null)?.message || `HTTP ${res.status}`;
+      throw new Error(message);
+    }
+
+    return data as T;
+  } catch (error) {
+    // Mejorar el mensaje de error para debugging
+    if (error instanceof TypeError && error.message === "Failed to fetch") {
+      console.error(`[API] Failed to fetch ${url}`);
+      console.error(`[API] Posibles causas:`);
+      console.error(`  1. El servidor en ${API_BASE_URL} no está corriendo`);
+      console.error(`  2. Problema de CORS`);
+      console.error(`  3. No hay conexión de red`);
+      throw new Error(`No se pudo conectar al servidor en ${API_BASE_URL}. Verifica que el backend esté corriendo.`);
+    }
+    throw error;
   }
-
-  return data as T;
 }
 
 export const api = {
-  get: <T>(path: string, auth = false) => apiFetch<T>(path, { method: "GET", auth }),
+  get: async <T>(path: string, auth = false) => {
+    const result = await apiFetch<T>(path, { method: "GET", auth });
+    return { data: result };
+  },
   post: <T>(path: string, body?: unknown, auth = false) => apiFetch<T>(path, { method: "POST", body, auth }),
   put: <T>(path: string, body?: unknown, auth = false) => apiFetch<T>(path, { method: "PUT", body, auth }),
   patch: <T>(path: string, body?: unknown, auth = false) => apiFetch<T>(path, { method: "PATCH", body, auth }),

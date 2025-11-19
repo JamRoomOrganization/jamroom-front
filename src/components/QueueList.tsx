@@ -14,7 +14,7 @@ function fmt(sec = 0) {
   return `${m}:${r}`;
 }
 
-export default function QueueList({
+const QueueList = React.memo(function QueueList({
   queue = [],
   onAddClick,
   onSkipClick,
@@ -67,4 +67,6 @@ export default function QueueList({
       )}
     </div>
   );
-}
+});
+
+export default QueueList;
