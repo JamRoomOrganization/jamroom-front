@@ -44,7 +44,6 @@ const PlayerNow = React.memo(function PlayerNow({
     setPos(0);
   }, [track?.id]);
 
-
   React.useEffect(() => {
     const i = setInterval(() => setPos((p) => Math.min(p + 1, total)), 1000);
     return () => clearInterval(i);
@@ -91,7 +90,6 @@ const PlayerNow = React.memo(function PlayerNow({
             <p className="text-slate-400">{track.artist}</p>
           )}
 
-          {/* Barra de progreso clicable (mock) */}
           <div className="mt-5">
             <div
               role="slider"
@@ -117,7 +115,6 @@ const PlayerNow = React.memo(function PlayerNow({
             </div>
           </div>
 
-          {/* Controles */}
           <div className="mt-5 flex items-center gap-3">
             <button
               className="px-4 py-2 rounded-xl bg-slate-700/70 hover:bg-slate-700 text-white transition"
@@ -139,3 +136,4 @@ const PlayerNow = React.memo(function PlayerNow({
 });
 
 export default PlayerNow;
+

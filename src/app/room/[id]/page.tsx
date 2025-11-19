@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import InviteDialog from "@/components/InviteDialog";
 import AddSongDialog from "@/components/AddSongDialog";
 import { useRoomMembers } from "@/hooks/useRoomMembers";
+import { useRoomQueue } from "@/hooks/useRoomQueue";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -21,12 +22,11 @@ export default function RoomPage({ params }: PageProps) {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
-  // Unwrap params usando React.use() según Next.js 15
   const { id } = React.use(params);
 
   const {
     room,
-    loading,
+    loading: roomLoading,
     error,
     skipTrack,
     changeTrackFromExternalStream,
@@ -36,11 +36,17 @@ export default function RoomPage({ params }: PageProps) {
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
 
-  // Carga de miembros reales desde queue-service
   const {
     members,
     error: membersError,
   } = useRoomMembers(id);
+
+  const {
+    queue,
+    loading: queueLoading,
+    error: queueError,
+    addTrack,
+  } = useRoomQueue(id);
 
   React.useEffect(() => {
     if (!authLoading && !user) {
@@ -50,7 +56,10 @@ export default function RoomPage({ params }: PageProps) {
 
   if (!user && !authLoading) return null;
 
-  if (loading || authLoading) {
+  // Combinar estados de carga
+  const isLoading = roomLoading || authLoading || queueLoading;
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 flex items-center justify-center">
         <div className="text-center">
@@ -140,11 +149,11 @@ export default function RoomPage({ params }: PageProps) {
     );
   }
 
-  const current = room?.queue?.[0];
+  const current = queue?.[0];
 
   const participantsFromMembers = members.map((m) => ({
     id: m.user_id,
-    name: m.user_id,
+    name: m.user_id, 
     roles: m.roles,
     canControlPlayback: m.can_control_playback,
     canAddTracks: m.can_add_tracks,
@@ -161,7 +170,6 @@ export default function RoomPage({ params }: PageProps) {
       <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Encabezado de sala */}
         <div className="mb-6">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
@@ -210,7 +218,6 @@ export default function RoomPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* Grid principal */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="lg:col-span-2 space-y-6">
             <PlayerNow
@@ -222,16 +229,14 @@ export default function RoomPage({ params }: PageProps) {
             />
 
             <QueueList
-              queue={room?.queue}
-              onAddClick={() => setAddOpen(true)}
-              onSkipClick={() => skipTrack()}
+              queue={queue}
+              onAddClick={() => setAddOpen(true)} 
+              onSkipClick={skipTrack}  
             />
           </div>
 
           <aside className="space-y-6">
-            <ParticipantsList
-              participants={participants}
-            />
+            <ParticipantsList participants={participants} />
             <ChatPanel />
           </aside>
         </div>
@@ -242,10 +247,12 @@ export default function RoomPage({ params }: PageProps) {
         open={addOpen}
         onOpenChange={setAddOpen}
         roomId={id}
+        onAddSong={addTrack}
         onChangeExternalTrack={changeTrackFromExternalStream}
       />
     </div>
   );
 }
+
 
 
