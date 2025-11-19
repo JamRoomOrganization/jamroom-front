@@ -11,7 +11,7 @@ function initials(name?: string) {
   return result || "U";
 }
 
-export default function ParticipantsList({ participants = [] }: { participants?: Participant[] }) {
+const ParticipantsList = React.memo(function ParticipantsList({ participants = [] }: { participants?: Participant[] }) {
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50">
       <h4 className="text-white font-semibold mb-3">Participantes</h4>
@@ -39,4 +39,6 @@ export default function ParticipantsList({ participants = [] }: { participants?:
       )}
     </div>
   );
-}
+});
+
+export default ParticipantsList;

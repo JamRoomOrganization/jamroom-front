@@ -6,6 +6,21 @@ type Track = {
   artist?: string;
   duration?: number; 
   cover_url?: string;
+  artworkUrl?: string;
+};
+
+type PlayerNowProps = {
+  track?: Track;
+  onAddClick?: () => void;
+  onSkipClick?: () => void;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
+  onChangeExternalTrack?: (opts: {
+    streamUrl: string;
+    title?: string;
+    artist?: string;
+    artworkUrl?: string;
+    source?: "audius" | "other";
+  }) => void;
 };
 
 function fmt(sec = 0) {
@@ -15,15 +30,13 @@ function fmt(sec = 0) {
   return `${m}:${r}`;
 }
 
-export default function PlayerNow({
+const PlayerNow = React.memo(function PlayerNow({
   track,
   onAddClick,
   onSkipClick,
-}: {
-  track?: Track;
-  onAddClick?: () => void;
-  onSkipClick?: () => void;
-}) {
+  audioRef,
+  onChangeExternalTrack,
+}: PlayerNowProps) {
   const [pos, setPos] = React.useState(0);
   const total = track?.duration ?? 240;
 
@@ -41,6 +54,9 @@ export default function PlayerNow({
 
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50">
+      {/* Audio element sincronizado con sync-service */}
+      <audio ref={audioRef} controls className="w-full mb-4" />
+
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-xl font-bold text-white">Reproduciendo ahora</h3>
         <div className="flex items-center gap-2 text-xs text-slate-300">
@@ -53,9 +69,9 @@ export default function PlayerNow({
 
       <div className="flex items-center gap-5">
         <div className="relative w-24 h-24 rounded-2xl overflow-hidden shrink-0 border border-slate-700/60">
-          {track?.cover_url ? (
+          {(track?.cover_url || track?.artworkUrl) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={track.cover_url} alt="" className="w-full h-full object-cover" />
+            <img src={track.cover_url || track.artworkUrl} alt="" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
               <svg width="36" height="36" viewBox="0 0 24 24" className="text-white">
@@ -84,7 +100,7 @@ export default function PlayerNow({
               aria-valuenow={pos}
               onClick={(e) => {
                 const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                const x = (e as any).clientX - rect.left;
+                const x = (e as React.MouseEvent).clientX - rect.left;
                 const next = Math.round((x / rect.width) * total);
                 setPos(next);
               }}
@@ -120,4 +136,6 @@ export default function PlayerNow({
       </div>
     </div>
   );
-}
+});
+
+export default PlayerNow;

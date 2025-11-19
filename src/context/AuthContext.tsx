@@ -45,6 +45,9 @@ function parseJwt(token: string): any {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // Modo de desarrollo para saltarse autenticación
+  const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === 'true';
+
   // 👇 IMPORTANTE: mismo valor inicial en server y cliente
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,15 +84,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = useCallback(async (email: string, password: string) => {
     setLoading(true);
     try {
+      console.log('[Auth] Attempting login to backend...');
+
       const tokens = await api.post<LoginResponse>("/auth/login", {
         email,
         password,
       });
 
+      console.log('[Auth] Login successful');
+
       localStorage.setItem("idToken", tokens.idToken);
       localStorage.setItem("accessToken", tokens.accessToken);
       localStorage.setItem("refreshToken", tokens.refreshToken);
-
       localStorage.setItem("jr_token", tokens.accessToken);
 
       const payload = parseJwt(tokens.idToken);
@@ -103,6 +109,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           payload.username ??
           undefined,
       });
+    } catch (error) {
+      console.error('[Auth] Login error:', error);
+      setLoading(false);
+      throw error; // Re-lanzar para que el componente de login lo maneje
     } finally {
       setLoading(false);
     }

@@ -2,7 +2,7 @@ import React from "react";
 import Link from "next/link";
 import type { LobbyRoom } from "../types";
 
-export default function RoomCard({ room }: { room: LobbyRoom }) {
+const RoomCard = React.memo(function RoomCard({ room }: { room: LobbyRoom }) {
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 hover:border-purple-500/30 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-purple-500/10 group">
       <div className="flex justify-between items-start mb-4">
@@ -47,4 +47,6 @@ export default function RoomCard({ room }: { room: LobbyRoom }) {
       </div>
     </div>
   );
-}
+});
+
+export default RoomCard;

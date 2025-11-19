@@ -8,7 +8,7 @@ type ChatMessage = {
   ts: string;
 };
 
-export default function ChatPanel({ messages = mockMessages }: { messages?: ChatMessage[] }) {
+const ChatPanel = React.memo(function ChatPanel({ messages = mockMessages }: { messages?: ChatMessage[] }) {
   const [draft, setDraft] = React.useState("");
   const listRef = React.useRef<HTMLDivElement>(null);
 
@@ -61,4 +61,6 @@ export default function ChatPanel({ messages = mockMessages }: { messages?: Chat
       </div>
     </div>
   );
-}
+});
+
+export default ChatPanel;
