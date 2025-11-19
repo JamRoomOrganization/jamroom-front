@@ -4,7 +4,7 @@ type Track = {
   id: string;
   title: string;
   artist?: string;
-  duration?: number; // segundos
+  duration?: number;
 };
 
 function fmt(sec = 0) {

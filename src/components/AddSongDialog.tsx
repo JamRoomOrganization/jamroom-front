@@ -1,21 +1,32 @@
 import React from "react";
 
+type AddSongDialogProps = {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  roomId: string;
+  onAddSong: (trackId: string, title?: string) => Promise<void>;
+};
+
 export default function AddSongDialog({
   open,
   onOpenChange,
   roomId,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  roomId: string;
-}) {
-  const [trackId, setTrackId] = React.useState("");
+  onAddSong,  
+}: AddSongDialogProps) {
+  const [trackId, setTrackId] = React.useState<string>("");
 
   if (!open) return null;
 
   const submit = async () => {
-    setTrackId("");
-    onOpenChange(false);
+    if (trackId.trim()) {
+      try {
+        await onAddSong(trackId, "Nueva canción"); 
+        setTrackId(""); 
+        onOpenChange(false); 
+      } catch (err) {
+        console.error("Error al añadir canción:", err);
+      }
+    }
   };
 
   return (
@@ -55,3 +66,4 @@ export default function AddSongDialog({
     </div>
   );
 }
+

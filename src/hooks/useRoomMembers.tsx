@@ -32,14 +32,11 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
     setError(null);
 
     try {
-      // 1) Aseguramos que el usuario actual sea miembro de la sala
       await api.post(
         `/api/rooms/${roomId}/members/ensure`,
-        {},
-        true // auth = true, manda Bearer
+        {}, true
       );
 
-      // 2) Obtenemos la lista de miembros (si es host)
       const data = await api.get<RoomMember[]>(
         `/api/rooms/${roomId}/members`,
         true

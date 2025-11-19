@@ -6,12 +6,13 @@ import PlayerNow from "../../../components/PlayerNow";
 import QueueList from "../../../components/QueueList";
 import ChatPanel from "../../../components/ChatPanel";
 import ParticipantsList from "../../../components/ParticipantsList";
-import { useRoom } from "../../../hooks/useRoom";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import InviteDialog from "../../../components/InviteDialog";
 import AddSongDialog from "../../../components/AddSongDialog";
 import { useRoomMembers } from "../../../hooks/useRoomMembers";
+import { useRoomQueue } from "../../../hooks/useRoomQueue";
+import { useRoom } from "../../../hooks/useRoom";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -20,21 +21,27 @@ type PageProps = {
 export default function RoomPage({ params }: PageProps) {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-
-  // 👇 aquí está la clave para quitar el warning de Next
   const { id } = React.use(params);
 
-  const { room, loading, skipTrack } = useRoom(id);
+  // Usamos useRoom para obtener los datos de la sala
+  const { room, loading: roomLoading } = useRoom(id);
 
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
 
-  // Carga de miembros reales desde queue-service
   const {
     members,
     loading: membersLoading,
     error: membersError,
   } = useRoomMembers(id);
+
+  const {
+    queue,
+    loading: queueLoading,
+    error: queueError,
+    addTrack,
+    skipTrack, 
+  } = useRoomQueue(id);  
 
   React.useEffect(() => {
     if (!authLoading && !user) {
@@ -44,7 +51,7 @@ export default function RoomPage({ params }: PageProps) {
 
   if (!user && !authLoading) return null;
 
-  if (loading || authLoading) {
+  if (roomLoading || authLoading || queueLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 flex items-center justify-center">
         <div className="text-center">
@@ -55,11 +62,11 @@ export default function RoomPage({ params }: PageProps) {
     );
   }
 
-  const current = room?.queue?.[0];
+  const current = queue?.[0];
 
   const participantsFromMembers = members.map((m) => ({
     id: m.user_id,
-    name: m.user_id,
+    name: m.user_id, 
     roles: m.roles,
     canControlPlayback: m.can_control_playback,
     canAddTracks: m.can_add_tracks,
@@ -76,7 +83,6 @@ export default function RoomPage({ params }: PageProps) {
       <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Encabezado de sala */}
         <div className="mb-6">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
@@ -125,35 +131,33 @@ export default function RoomPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* Grid principal */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="lg:col-span-2 space-y-6">
             <PlayerNow
               track={current}
-              onAddClick={() => setAddOpen(true)}
-              onSkipClick={() => skipTrack()}
+              onAddClick={() => setAddOpen(true)} 
+              onSkipClick={skipTrack} 
             />
 
             <QueueList
-              queue={room?.queue}
-              onAddClick={() => setAddOpen(true)}
-              onSkipClick={() => skipTrack()}
+              queue={queue}
+              onAddClick={() => setAddOpen(true)} 
+               onSkipClick={skipTrack}  
             />
           </div>
 
           <aside className="space-y-6">
-            <ParticipantsList
-              participants={participants}
-            />
+            <ParticipantsList participants={participants} />
             <ChatPanel />
           </aside>
         </div>
       </main>
 
       <InviteDialog open={inviteOpen} onOpenChange={setInviteOpen} roomId={id} />
-      <AddSongDialog open={addOpen} onOpenChange={setAddOpen} roomId={id} />
+      <AddSongDialog open={addOpen} onOpenChange={setAddOpen} roomId={id} onAddSong={addTrack} /> 
     </div>
   );
 }
+
 
 

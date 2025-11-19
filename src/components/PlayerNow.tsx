@@ -31,7 +31,6 @@ export default function PlayerNow({
     setPos(0);
   }, [track?.id]);
 
-
   React.useEffect(() => {
     const i = setInterval(() => setPos((p) => Math.min(p + 1, total)), 1000);
     return () => clearInterval(i);
@@ -54,7 +53,6 @@ export default function PlayerNow({
       <div className="flex items-center gap-5">
         <div className="relative w-24 h-24 rounded-2xl overflow-hidden shrink-0 border border-slate-700/60">
           {track?.cover_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={track.cover_url} alt="" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
@@ -75,7 +73,6 @@ export default function PlayerNow({
             <p className="text-slate-400">{track.artist}</p>
           )}
 
-          {/* Barra de progreso clicable (mock) */}
           <div className="mt-5">
             <div
               role="slider"
@@ -101,7 +98,6 @@ export default function PlayerNow({
             </div>
           </div>
 
-          {/* Controles */}
           <div className="mt-5 flex items-center gap-3">
             <button
               className="px-4 py-2 rounded-xl bg-slate-700/70 hover:bg-slate-700 text-white transition"
@@ -121,3 +117,4 @@ export default function PlayerNow({
     </div>
   );
 }
+

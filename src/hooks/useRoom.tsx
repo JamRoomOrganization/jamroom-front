@@ -1,31 +1,59 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
+import { api } from "@/lib/api";
+
+type Room = {
+  id: string;
+  name: string;
+  participants: { id: string; name: string }[];
+  queue: { id: string; title: string; artist: string }[];
+};
+
+type Member = {
+  user_id: string;
+  username: string;
+};
+
+type Track = {
+  track_id: string;
+  title: string;
+  artist: string;
+};
 
 export function useRoom(roomId: string) {
-  const [room, setRoom] = useState<any>(null);
+  const [room, setRoom] = useState<Room | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Simular carga de datos
-    setTimeout(() => {
-      setRoom({
-        id: roomId,
-        name: `Sala ${roomId}`,
-        participants: [
-          { id: 1, name: 'Usuario 1' },
-          { id: 2, name: 'Usuario 2' },
-        ],
-        queue: [
-          { id: 1, title: 'Canción 1', artist: 'Artista 1' },
-          { id: 2, title: 'Canción 2', artist: 'Artista 2' },
-        ],
-      });
-      setLoading(false);
-    }, 1000);
+    const fetchRoomData = async () => {
+      try {
+        const roomResponse: Room = await api.get(`/api/rooms/${roomId}`, true);
+        const membersResponse: Member[] = await api.get(`/api/rooms/${roomId}/members`, true);
+        const queueResponse: Track[] = await api.get(`/api/rooms/${roomId}/queue`, true);
+
+        setRoom({
+          id: roomResponse.id,
+          name: roomResponse.name,
+          participants: membersResponse.map((member) => ({
+            id: member.user_id,
+            name: member.username || "Usuario desconocido",
+          })),
+          queue: queueResponse.map((track) => ({
+            id: track.track_id,
+            title: track.title,
+            artist: track.artist || "Desconocido",
+          })),
+        });
+      } catch (err: any) {
+        setError(err?.message || "Error al obtener la sala.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRoomData();
   }, [roomId]);
 
-  const skipTrack = () => {
-    console.log('Skipping track...');
-  };
-
-  return { room, loading, skipTrack };
+  return { room, loading, error };
 }
+
