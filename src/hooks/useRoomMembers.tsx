@@ -37,12 +37,12 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
         {}, true
       );
 
-      const data = await api.get<RoomMember[]>(
+      const result = await api.get<RoomMember[]>(
         `/api/rooms/${roomId}/members`,
         true
       );
 
-      setMembers(data);
+      setMembers(result.data);
     } catch (err: any) {
       console.error("[useRoomMembers] error", err);
       setError(err?.message || "Error cargando participantes.");
