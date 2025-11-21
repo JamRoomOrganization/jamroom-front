@@ -1,5 +1,13 @@
 
-const AUDIUS_BASE = 'https://discoveryprovider.audius.co/v1';
+const AUDIUS_API = 'https://api.audius.co';
+const FALLBACK_DISCOVERY = 'https://discoveryprovider.audius.co/v1';
+const APP_NAME = 'jamroom';
+
+type DiscoveryResponse =
+    | { data?: string[] }
+    | { data?: { latest?: string[] } }
+    | { services?: { discovery?: string[] } };
+
 
 export type AudiusTrack = {
     id: string;
@@ -29,6 +37,11 @@ type AudiusStreamResponse =
 const searchCache = new Map<string, { data: AudiusTrack[]; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
+// Cache para el nodo de descubrimiento recomendado por Audius
+let cachedDiscovery: { url: string; timestamp: number } | null = null;
+const DISCOVERY_CACHE_DURATION = 10 * 60 * 1000; // 10 minutos
+
+
 /**
  * Limpia entradas expiradas del cache
  */
@@ -40,6 +53,46 @@ function cleanExpiredCache() {
         }
     }
 }
+
+/**
+ * Obtiene el endpoint de discovery más reciente recomendado por Audius.
+ * Usa https://api.audius.co y guarda el resultado en cache.
+ */
+async function getDiscoveryBase(forceRefresh = false): Promise<string> {
+    const now = Date.now();
+    if (!forceRefresh && cachedDiscovery && now - cachedDiscovery.timestamp < DISCOVERY_CACHE_DURATION) {
+        return cachedDiscovery.url;
+    }
+
+    try {
+        const res = await fetch(`${AUDIUS_API}/`);
+        if (res.ok) {
+            const body = (await res.json()) as DiscoveryResponse;
+
+            const candidates =
+                Array.isArray((body as { data?: string[] }).data)
+                    ? (body as { data?: string[] }).data
+                    : Array.isArray((body as { data?: { latest?: string[] } }).data?.latest)
+                      ? (body as { data?: { latest?: string[] } }).data?.latest
+                      : Array.isArray((body as { services?: { discovery?: string[] } }).services?.discovery)
+                        ? (body as { services?: { discovery?: string[] } }).services?.discovery
+                        : undefined;
+
+            const firstUrl = candidates?.find((item) => typeof item === 'string' && item.startsWith('http'));
+            if (firstUrl) {
+                const normalized = `${firstUrl.replace(/\/$/, '')}/v1`;
+                cachedDiscovery = { url: normalized, timestamp: now };
+                return normalized;
+            }
+        }
+    } catch (err) {
+        console.error('[Audius] discovery lookup failed', err);
+    }
+
+    cachedDiscovery = { url: FALLBACK_DISCOVERY, timestamp: now };
+    return FALLBACK_DISCOVERY;
+}
+
 
 /**
  * Busca tracks en Audius por texto libre con cache
@@ -61,11 +114,11 @@ export async function searchAudiusTracks(
             return cached.data;
         }
     }
-
-    const url = new URL(`${AUDIUS_BASE}/tracks/search`);
+    const base = await getDiscoveryBase();
+    const url = new URL(`${base}/tracks/search`);
     url.searchParams.set('query', trimmed);
     url.searchParams.set('limit', '10');
-    url.searchParams.set('app_name', 'jamroom');
+    url.searchParams.set('app_name', APP_NAME);
 
     let res: Response;
     try {
@@ -106,10 +159,11 @@ export async function getAudiusStreamUrl(
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
-            const url = new URL(
-                `${AUDIUS_BASE}/tracks/${encodeURIComponent(trimmed)}/stream`,
+            const base = await getDiscoveryBase(attempt > 0);
+            const url = new URL(`${base}/tracks/${encodeURIComponent(trimmed)}/stream`,
+
             );
-            url.searchParams.set('app_name', 'jamroom');
+            url.searchParams.set('app_name', APP_NAME);
             url.searchParams.set('no_redirect', 'true');
 
             const res = await fetch(url.toString(), {
