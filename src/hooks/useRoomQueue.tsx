@@ -39,17 +39,24 @@ export function useRoomQueue(roomId: string) {
   useEffect(() => {
     const fetchQueue = async () => {
       try {
-        const data: RoomQueueItem[] = await api.get(`/api/rooms/${roomId}/queue`, true);
+        // 1) Pide el tipo correcto al wrapper de API
+        const res = await api.get<RoomQueueItem[]>(`/api/rooms/${roomId}/queue`, true);
+    
+        // 2) Extrae el data (que es el array real)
+        const data = res.data ?? [];
+    
+        // 3) Transforma la cola
         const transformedQueue = data.map((item) => ({
           id: item.track_id,
-          title: item.title ?? "Título desconocido", 
-          artist: "", 
-          duration: 240, 
-          cover_url: "", 
+          title: item.title ?? "Título desconocido",
         }));
+    
         setQueue(transformedQueue);
-      } catch (err: any) {
-        setError(err?.message || "Error al obtener la cola.");
+      } catch (err) {
+        console.error("[useRoomQueue] error fetching queue", err);
+        setError(
+          err instanceof Error ? err.message : "Error desconocido al cargar la cola",
+        );
       } finally {
         setLoading(false);
       }
