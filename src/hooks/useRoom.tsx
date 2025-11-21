@@ -33,13 +33,6 @@ export type Room = {
     queue: RoomTrack[];
 };
 
-type RoomResponse = {
-    id: string;
-    name: string;
-    participants?: RoomParticipant[];
-    queue?: RoomTrack[];
-};
-
 type SyncPacket = {
     trackId?: string;
     playbackState?: "playing" | "paused";
@@ -79,15 +72,14 @@ export function useRoom(roomId: string) {
                 setLoading(true);
                 setError(null);
 
-                const res = await api.get<RoomResponse>(`/rooms/${roomId}`, true);
-                const data = res.data;
+                const res = await api.get<RoomTrack[]>(`/api/rooms/${roomId}/queue`, true);
 
                 if (!cancelled) {
                     setRoom({
-                        id: data.id,
-                        name: data.name,
-                        participants: data.participants ?? [],
-                        queue: data.queue ?? [],
+                        id: roomId,
+                        name: roomId,
+                        participants: [],
+                        queue: res.data ?? [],
                     });
                 }
             } catch (err) {
