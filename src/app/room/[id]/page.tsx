@@ -222,7 +222,7 @@ export default function RoomPage({ params }: PageProps) {
 
   const participantsFromMembers = members.map((m) => ({
     id: m.user_id,
-    name: m.user_id, 
+    name: m.username, 
     roles: m.roles,
     canControlPlayback: m.can_control_playback,
     canAddTracks: m.can_add_tracks,
