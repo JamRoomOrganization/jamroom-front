@@ -35,7 +35,8 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
     try {
       await api.post(
         `/api/rooms/${roomId}/members/ensure`,
-        {}, true
+        {},
+        true
       );
 
       const result = await api.get<RoomMember[]>(
@@ -43,7 +44,10 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
         true
       );
 
-      setMembers(result.data);
+      console.log("[useRoomMembers] /members response:", result);
+      console.log("[useRoomMembers] /members first member:", result.data?.[0]);
+
+      setMembers(result.data ?? []);
     } catch (err: any) {
       console.error("[useRoomMembers] error", err);
       setError(err?.message || "Error cargando participantes.");
@@ -55,6 +59,12 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
   React.useEffect(() => {
     loadMembers();
   }, [loadMembers]);
+  
+  React.useEffect(() => {
+    console.log("[useRoomMembers] members state updated:", members);
+  }, [members]);
 
   return { members, loading, error, reload: loadMembers };
 }
+
+
