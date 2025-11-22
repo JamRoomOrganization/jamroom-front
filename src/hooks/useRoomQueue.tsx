@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { getAudiusStreamUrl } from "@/lib/audiusClient";
 
 type RoomQueueItem = {
   id: string;
@@ -19,6 +20,9 @@ type Track = {
   artist?: string;
   duration?: number;
   cover_url?: string;
+  artworkUrl?: string;
+  streamUrl?: string;
+  url?: string;
 };
 
 type UseRoomQueueResult = {
@@ -65,20 +69,49 @@ export function useRoomQueue(roomId: string) {
     fetchQueue();
   }, [roomId]);
 
-  const addTrack = async (trackId: string, title: string = "Nueva Canción") => {
+  const addTrack = async (trackId: string, metadata?: {
+    title?: string;
+    artist?: string;
+    artworkUrl?: string;
+    duration?: number;
+  }) => {
     try {
+      console.log('[useRoomQueue] Añadiendo track:', trackId, metadata);
+
+      // Obtener la URL de streaming real de Audius
+      const streamUrl = await getAudiusStreamUrl(trackId);
+
+      if (!streamUrl) {
+        console.error('[useRoomQueue] No se pudo obtener URL de stream para:', trackId);
+        throw new Error('No se pudo obtener la URL de streaming');
+      }
+
+      console.log('[useRoomQueue] URL de stream obtenida:', streamUrl);
+
       const newTrack: Track = {
-        id: trackId,
-        title,
-        artist: "",
-        duration: 240,  // Duración predeterminada
-        cover_url: "",  // URL vacía
+        id: trackId,           // Mantener el ID original de Audius
+        title: metadata?.title || "Nueva Canción",
+        artist: metadata?.artist || "",
+        duration: metadata?.duration || 240,
+        cover_url: metadata?.artworkUrl || "",
+        artworkUrl: metadata?.artworkUrl || "",
+        streamUrl: streamUrl,  // URL de streaming real
+        url: streamUrl,        // También en url por compatibilidad
       };
 
       setQueue((prevQueue) => [...prevQueue, newTrack]);
-      await api.post(`/api/rooms/${roomId}/queue`, { trackId, title }, true); 
-    } catch (err: any) {
-      setError(err?.message || "Error al agregar la canción.");
+
+      // Enviar al backend
+      await api.post(`/api/rooms/${roomId}/queue`, {
+        trackId: streamUrl,
+        title: metadata?.title || "Nueva Canción"
+      }, true);
+
+      console.log('[useRoomQueue] Track añadido exitosamente a la cola');
+    } catch (err: unknown) {
+      console.error('[useRoomQueue] Error al agregar track:', err);
+      setError(err instanceof Error ? err.message : "Error al agregar la canción.");
+      throw err;
     }
   };
 
@@ -88,8 +121,9 @@ export function useRoomQueue(roomId: string) {
       setQueue(newQueue);
 
       await api.post(`/api/rooms/${roomId}/queue/skip`, {}, true);
-    } catch (err: any) {
-      setError(err?.message || "Error al saltar la canción.");
+    } catch (err: unknown) {
+      console.error('[useRoomQueue] Error al saltar track:', err);
+      setError(err instanceof Error ? err.message : "Error al saltar la canción.");
     }
   };
 

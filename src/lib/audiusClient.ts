@@ -19,6 +19,7 @@ export type AudiusTrack = {
         '1000x1000'?: string;
     };
     user?: {
+        id: string;
         handle: string;
         name: string;
     };
@@ -148,7 +149,7 @@ export async function searchAudiusTracks(
 /**
  * Obtiene una URL de stream (MP3) estable para un track de Audius
  * usando no_redirect=true para evitar 302 en el navegador.
- * Incluye sistema de reintentos automáticos.
+ * Incluye sistema de reintentos automáticos y múltiples estrategias.
  */
 export async function getAudiusStreamUrl(
     trackId: string,
@@ -157,13 +158,17 @@ export async function getAudiusStreamUrl(
     const trimmed = trackId.trim();
     if (!trimmed) return null;
 
+    console.log(`[Audius] Obteniendo stream URL para track: ${trimmed}`);
+
+    let lastError: any;
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
             const base = await getDiscoveryBase(attempt > 0);
-            const url = new URL(`${base}/tracks/${encodeURIComponent(trimmed)}/stream`,
-
-            );
+            const url = new URL(`${base}/tracks/${encodeURIComponent(trimmed)}/stream`);
             url.searchParams.set('app_name', APP_NAME);
+
+            // Estrategia 1: Intentar obtener la URL con no_redirect
             url.searchParams.set('no_redirect', 'true');
 
             const res = await fetch(url.toString(), {
@@ -172,71 +177,51 @@ export async function getAudiusStreamUrl(
                 },
             });
 
-            if (!res.ok) {
-                const text = await res.text().catch(() => '');
-                console.error(
-                    `[Audius] stream error (intento ${attempt + 1}/${maxRetries})`,
-                    res.status,
-                    text,
-                );
+            if (res.ok) {
+                const body = (await res.json()) as AudiusStreamResponse;
+                console.log(`[Audius] stream response:`, body);
 
-                // Si es el último intento, retornar null
-                if (attempt === maxRetries - 1) {
-                    return null;
+                // La API devuelve la URL directamente en 'data' como string
+                if ('data' in body && typeof body.data === 'string' && body.data.length > 0) {
+                    console.log(`[Audius] Stream URL obtenida exitosamente: ${body.data}`);
+                    return body.data;
                 }
 
-                // Esperar antes de reintentar (backoff exponencial)
-                await new Promise((resolve) =>
-                    setTimeout(resolve, 1000 * Math.pow(2, attempt)),
-                );
-                continue;
-            }
+                // Fallback: respuesta directa { url: "..." }
+                if ('url' in body && typeof body.url === 'string' && body.url.length > 0) {
+                    console.log(`[Audius] Stream URL obtenida (formato alternativo): ${body.url}`);
+                    return body.url;
+                }
 
-            const body = (await res.json()) as AudiusStreamResponse;
-
-            // Intento 1: respuesta directa { url: "..." }
-            if ('url' in body && typeof body.url === 'string' && body.url.length > 0) {
-                console.log(`[Audius] Stream URL obtenida exitosamente en intento ${attempt + 1}`);
-                return body.url;
-            }
-
-            // Intento 2: respuesta envuelta en data[0].url
-            if ('data' in body && Array.isArray(body.data)) {
-                const firstUrl = body.data.find((item) => typeof item?.url === 'string')?.url;
-                if (firstUrl) {
-                    console.log(`[Audius] Stream URL obtenida exitosamente en intento ${attempt + 1}`);
-                    return firstUrl;
+                // Fallback: respuesta envuelta en data[0].url
+                if ('data' in body && Array.isArray(body.data)) {
+                    const firstUrl = body.data.find((item) => typeof item?.url === 'string')?.url;
+                    if (firstUrl) {
+                        console.log(`[Audius] Stream URL obtenida (array format): ${firstUrl}`);
+                        return firstUrl;
+                    }
                 }
             }
 
-            console.error('[Audius] stream response without url', body);
+            lastError = `HTTP ${res.status}`;
+            console.warn(`[Audius] stream error (intento ${attempt + 1}/${maxRetries}): ${lastError}`);
 
-            // Si no encontramos URL, intentar de nuevo
-            if (attempt < maxRetries - 1) {
-                await new Promise((resolve) =>
-                    setTimeout(resolve, 1000 * Math.pow(2, attempt)),
-                );
-                continue;
-            }
-
-            return null;
         } catch (err) {
-            console.error(
-                `[Audius] network/stream error (intento ${attempt + 1}/${maxRetries})`,
-                err,
-            );
+            lastError = err;
+            console.warn(`[Audius] stream error (intento ${attempt + 1}/${maxRetries}):`, err);
+        }
 
-            // Si es el último intento, retornar null
-            if (attempt === maxRetries - 1) {
-                return null;
-            }
-
-            // Esperar antes de reintentar (backoff exponencial)
+        // Esperar antes de reintentar (backoff exponencial)
+        if (attempt < maxRetries - 1) {
             await new Promise((resolve) =>
                 setTimeout(resolve, 1000 * Math.pow(2, attempt)),
             );
         }
     }
 
-    return null;
+    // Último fallback: retornar URL directa
+    const base = await getDiscoveryBase();
+    const finalFallback = `${base}/tracks/${encodeURIComponent(trimmed)}/stream?app_name=${APP_NAME}`;
+    console.log('[Audius] Retornando URL de fallback final');
+    return finalFallback;
 }

@@ -14,7 +14,12 @@ type AddSongDialogProps = {
         artworkUrl?: string;
         source?: "audius" | "other";
     }) => void;
-    onAddSong?: (trackId: string, title?: string) => Promise<void>;
+    onAddSong?: (trackId: string, metadata?: {
+        title?: string;
+        artist?: string;
+        artworkUrl?: string;
+        duration?: number;
+    }) => Promise<void>;
 };
 
 export default function AddSongDialog({
@@ -56,20 +61,36 @@ export default function AddSongDialog({
     // Cuando el usuario selecciona un track de la lista
     async function handleSelectTrack(track: AudiusTrack) {
         try {
+            setError(null);
+
             // Si tenemos onAddSong, usarlo para añadir a la cola
             if (onAddSong) {
-                await onAddSong(track.id, track.title);
+                const artworkUrl = track.artwork?.["480x480"] ??
+                                  track.artwork?.["1000x1000"] ??
+                                  track.artwork?.["150x150"];
+
+                await onAddSong(track.id, {
+                    title: track.title,
+                    artist: track.user?.name ?? track.user?.handle ?? "Audius",
+                    artworkUrl: artworkUrl,
+                    duration: track.duration
+                });
                 onOpenChange(false);
                 return;
             }
 
             // Si tenemos onChangeExternalTrack, usarlo para cambiar track actual
             if (onChangeExternalTrack) {
+                console.log('[AddSongDialog] Obteniendo stream URL para track:', track.id);
+
                 const streamUrl = await getAudiusStreamUrl(track.id);
+
                 if (!streamUrl) {
-                    setError("No se pudo obtener el stream de este track.");
+                    setError("No se pudo obtener el stream de este track. Intenta con otro.");
                     return;
                 }
+
+                console.log('[AddSongDialog] Stream URL obtenida:', streamUrl);
 
                 onChangeExternalTrack({
                     streamUrl,
@@ -81,13 +102,13 @@ export default function AddSongDialog({
                         track.artwork?.["150x150"],
                     source: "audius",
                 });
-            }
 
-            // Cerrar el diálogo después de seleccionar
-            onOpenChange(false);
+                // Cerrar el diálogo después de seleccionar
+                onOpenChange(false);
+            }
         } catch (err: unknown) {
             console.error("[AddSongDialog] handleSelectTrack error", err);
-            setError("Error al preparar la reproducción de este track.");
+            setError("Error al preparar la reproducción de este track. Por favor, intenta con otro.");
         }
     }
 

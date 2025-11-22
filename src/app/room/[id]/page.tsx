@@ -35,6 +35,7 @@ export default function RoomPage({ params }: PageProps) {
 
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
+  const [currentTrack, setCurrentTrack] = React.useState<any>(null);
 
   const {
     members,
@@ -47,6 +48,28 @@ export default function RoomPage({ params }: PageProps) {
     error: queueError,
     addTrack,
   } = useRoomQueue(id);
+
+  // Actualizar currentTrack cuando cambia la cola
+  React.useEffect(() => {
+    if (queue && queue.length > 0) {
+      // Si no hay currentTrack, usar la primera canción
+      if (!currentTrack) {
+        console.log('[Room] Inicializando currentTrack con primera canción:', queue[0]);
+        setCurrentTrack(queue[0]);
+      } else {
+        // Si currentTrack existe, verificar que siga en la cola
+        const stillInQueue = queue.find(t => t.id === currentTrack.id);
+        if (!stillInQueue) {
+          // Si la canción actual ya no está en la cola, usar la primera
+          console.log('[Room] Canción actual no está en cola, usando primera:', queue[0]);
+          setCurrentTrack(queue[0]);
+        }
+      }
+    } else if (queue && queue.length === 0) {
+      // Si la cola está vacía, limpiar currentTrack
+      setCurrentTrack(null);
+    }
+  }, [queue, currentTrack]);
 
   React.useEffect(() => {
     if (!authLoading && !user) {
@@ -149,7 +172,53 @@ export default function RoomPage({ params }: PageProps) {
     );
   }
 
-  const current = queue?.[0];
+  // Función para ir a la canción anterior
+  const handlePrevious = () => {
+    if (!queue || queue.length === 0) return;
+
+    const currentIndex = queue.findIndex(t => t.id === currentTrack?.id);
+
+    if (currentIndex > 0) {
+      const previousTrack = queue[currentIndex - 1];
+      console.log('[Room] Cambiando a canción anterior:', previousTrack);
+
+      // Actualizar el estado current - PlayerNow se encargará del resto
+      setCurrentTrack(previousTrack);
+    } else {
+      console.log('[Room] Ya estás en la primera canción');
+    }
+  };
+
+  // Función para seleccionar una canción específica de la cola
+  const handleSelectTrack = (trackId: string) => {
+    if (!queue) return;
+
+    const selectedTrack = queue.find(t => t.id === trackId);
+
+    if (selectedTrack) {
+      console.log('[Room] Cambiando a canción seleccionada:', selectedTrack);
+
+      // Actualizar el estado current - PlayerNow se encargará del resto
+      setCurrentTrack(selectedTrack);
+    }
+  };
+
+  // Función para ir a la siguiente canción
+  const handleNext = () => {
+    if (!queue || queue.length === 0) return;
+
+    const currentIndex = queue.findIndex(t => t.id === currentTrack?.id);
+
+    if (currentIndex < queue.length - 1) {
+      const nextTrack = queue[currentIndex + 1];
+      console.log('[Room] Saltando a siguiente:', nextTrack);
+
+      // Actualizar el estado current
+      setCurrentTrack(nextTrack);
+    } else {
+      console.log('[Room] Ya estás en la última canción');
+    }
+  };
 
   const participantsFromMembers = members.map((m) => ({
     id: m.user_id,
@@ -221,17 +290,20 @@ export default function RoomPage({ params }: PageProps) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="lg:col-span-2 space-y-6">
             <PlayerNow
-              track={current}
+              track={currentTrack}
               onAddClick={() => setAddOpen(true)}
-              onSkipClick={() => skipTrack()}
+              onSkipClick={handleNext}
+              onPreviousClick={handlePrevious}
               audioRef={audioRef}
               onChangeExternalTrack={changeTrackFromExternalStream}
             />
 
             <QueueList
               queue={queue}
-              onAddClick={() => setAddOpen(true)} 
-              onSkipClick={skipTrack}  
+              currentTrack={currentTrack}
+              onAddClick={() => setAddOpen(true)}
+              onSkipClick={handleNext}
+              onSelectTrack={handleSelectTrack}
             />
           </div>
 

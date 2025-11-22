@@ -125,28 +125,40 @@ export function useRoom(roomId: string) {
         socket.on("syncPacket", (pkt: SyncPacket) => {
             console.log("[useRoom] syncPacket received", pkt);
             const audio = audioRef.current;
-            if (!audio) return;
+            if (!audio) {
+                console.warn("[useRoom] No audio element available");
+                return;
+            }
 
             const { trackId, playbackState, positionMs } = pkt;
 
             // Cambiar fuente si cambió el track
             if (trackId && audio.src !== trackId) {
+                console.log("[useRoom] Cambiando track a:", trackId);
                 audio.src = trackId;
+                audio.load(); // Forzar recarga del audio
             }
 
             // Posición
             if (typeof positionMs === "number") {
-                audio.currentTime = positionMs / 1000;
+                const newTime = positionMs / 1000;
+                console.log("[useRoom] Ajustando posición a:", newTime, "segundos");
+                audio.currentTime = newTime;
             }
 
             // Play / Pause
             if (playbackState === "playing") {
+                console.log("[useRoom] Reproduciendo...");
                 audio
                     .play()
-                    .catch(() => {
-                        // bloqueo autoplay, normal
+                    .then(() => {
+                        console.log("[useRoom] Reproducción iniciada exitosamente");
+                    })
+                    .catch((err) => {
+                        console.warn("[useRoom] Error en play (puede ser bloqueo de autoplay):", err);
                     });
-            } else {
+            } else if (playbackState === "paused") {
+                console.log("[useRoom] Pausando...");
                 audio.pause();
             }
         });
