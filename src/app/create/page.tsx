@@ -56,16 +56,38 @@ export default function CreateRoomPage() {
         payload.initialTrackId = values.initialTrackId.trim();
       }
 
+      console.log("[create-room] Enviando payload:", payload);
+
       const created = await api.post<CreateRoomResponse>(
         "/api/rooms",
         payload,
         true // auth = true, manda Bearer
       );
 
+      console.log("[create-room] Sala creada:", created);
+
+      if (!created || !created.id) {
+        throw new Error("El servidor no devolvió un ID de sala válido");
+      }
+
       router.push(`/room/${created.id}`);
     } catch (err: any) {
-      console.error("[create-room] error", err);
-      setError(err?.message || "No se pudo crear la sala. Intenta de nuevo.");
+      console.error("[create-room] error completo:", err);
+      console.error("[create-room] error.message:", err?.message);
+      console.error("[create-room] error.stack:", err?.stack);
+
+      let errorMessage = "No se pudo crear la sala. Intenta de nuevo.";
+
+      if (err?.message) {
+        errorMessage = err.message;
+      }
+
+      // Si es un error de red
+      if (err?.message?.includes("No se pudo conectar al servidor")) {
+        errorMessage = "No se pudo conectar con el servidor. Verifica que el backend esté corriendo.";
+      }
+
+      setError(errorMessage);
     } finally {
       setSubmitting(false);
     }

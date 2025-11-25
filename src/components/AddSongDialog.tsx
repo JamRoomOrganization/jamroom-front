@@ -6,7 +6,6 @@ import { AudiusTrack, searchAudiusTracks, getAudiusStreamUrl } from "@/lib/audiu
 type AddSongDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    roomId: string;
     onChangeExternalTrack?: (opts: {
         streamUrl: string;
         title: string;
@@ -25,7 +24,6 @@ type AddSongDialogProps = {
 export default function AddSongDialog({
     open,
     onOpenChange,
-    roomId,
     onChangeExternalTrack,
     onAddSong,
 }: AddSongDialogProps) {
@@ -73,7 +71,6 @@ export default function AddSongDialog({
                     title: track.title,
                     artist: track.user?.name ?? track.user?.handle ?? "Audius",
                     artworkUrl: artworkUrl,
-                    duration: track.duration
                 });
                 onOpenChange(false);
                 return;
@@ -116,7 +113,9 @@ export default function AddSongDialog({
     const handleManualAdd = async () => {
         if (trackIdInput.trim() && onAddSong) {
             try {
-                await onAddSong(trackIdInput, "Canción añadida");
+                await onAddSong(trackIdInput, {
+                    title: "Canción añadida"
+                });
                 setTrackIdInput("");
                 onOpenChange(false);
             } catch (err) {
@@ -228,7 +227,7 @@ export default function AddSongDialog({
 
                             {!loading && !results.length && !error && (
                                 <p className="text-xs text-slate-500">
-                                    Escribe algo y pulsa "Buscar" para ver resultados desde Audius.
+                                    Escribe algo y pulsa &quot;Buscar&quot; para ver resultados desde Audius.
                                 </p>
                             )}
                         </div>

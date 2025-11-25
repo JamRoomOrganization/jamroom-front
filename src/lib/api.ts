@@ -31,6 +31,8 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   }
 
   try {
+    console.log(`[API] ${options.method || "GET"} ${url}`);
+
     const res = await fetch(url, {
       method: options.method || "GET",
       headers,
@@ -43,9 +45,16 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
 
     if (!res.ok) {
       const message = (data as { message?: string } | null)?.message || `HTTP ${res.status}`;
+      console.error(`[API] Error en ${options.method || "GET"} ${url}:`, {
+        status: res.status,
+        statusText: res.statusText,
+        message,
+        data,
+      });
       throw new Error(message);
     }
 
+    console.log(`[API] ✓ ${options.method || "GET"} ${url}`, data);
     return data as T;
   } catch (error) {
     // Mejorar el mensaje de error para debugging

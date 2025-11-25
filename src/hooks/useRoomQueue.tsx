@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import { getAudiusStreamUrl } from "@/lib/audiusClient";
 
@@ -30,102 +30,214 @@ type UseRoomQueueResult = {
   loading: boolean;
   error: string | null;
   reload: () => Promise<void>;
-  addTrack: (trackId: string, title?: string) => Promise<void>;
-  skipTrack: () => Promise<void>;
-  removeTrack: (entryId: string) => Promise<void>;
+  addTrack: (trackId: string, metadata?: {
+    title?: string;
+    artist?: string;
+    artworkUrl?: string;
+    duration?: number;
+  }) => Promise<{ streamUrl: string }>;
+  removeTrack: (trackId: string) => Promise<void>;
 };
 
-export function useRoomQueue(roomId: string) {
+export function useRoomQueue(roomId: string): UseRoomQueueResult {
   const [queue, setQueue] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchQueue = async () => {
-      try {
-        // 1) Pide el tipo correcto al wrapper de API
-        const res = await api.get<RoomQueueItem[]>(`/api/rooms/${roomId}/queue`, true);
-    
-        // 2) Extrae el data (que es el array real)
-        const data = res.data ?? [];
-    
-        // 3) Transforma la cola
-        const transformedQueue = data.map((item) => ({
-          id: item.track_id,
-          title: item.title ?? "Título desconocido",
-        }));
-    
-        setQueue(transformedQueue);
-      } catch (err) {
-        console.error("[useRoomQueue] error fetching queue", err);
-        setError(
-          err instanceof Error ? err.message : "Error desconocido al cargar la cola",
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Para evitar múltiples fetches simultáneos
+  const isFetchingRef = useRef(false);
 
-    fetchQueue();
+  const fetchQueue = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
+    try {
+      console.log("[useRoomQueue] Obteniendo cola para sala:", roomId);
+
+      const response = await api.get<RoomQueueItem[]>(
+        `/api/rooms/${roomId}/queue`,
+        true
+      );
+
+      const items = response.data || [];
+      console.log("[useRoomQueue] Items de cola recibidos:", items.length);
+
+      // Obtener metadatos completos de Audius para cada track
+      const tracksWithMetadata: Track[] = await Promise.all(
+        items.map(async (item) => {
+          try {
+            // Obtener stream URL
+            const streamUrl = await getAudiusStreamUrl(item.track_id);
+
+            // Obtener metadatos completos del track de Audius
+            let trackMetadata = null;
+            try {
+              const trackResponse = await fetch(
+                `https://discoveryprovider.audius.co/v1/tracks/${item.track_id}`
+              );
+              if (trackResponse.ok) {
+                const trackData = await trackResponse.json();
+                trackMetadata = trackData?.data?.[0] || trackData?.data;
+              }
+            } catch (err) {
+              console.warn(`[useRoomQueue] No se pudo obtener metadata para ${item.track_id}`);
+            }
+
+            return {
+              id: item.track_id,
+              title: trackMetadata?.title || item.title || item.track_id,
+              artist: trackMetadata?.user?.name || undefined,
+              duration: trackMetadata?.duration || undefined,
+              artworkUrl: trackMetadata?.artwork?.['480x480'] ||
+                         trackMetadata?.artwork?.['1000x1000'] ||
+                         trackMetadata?.artwork?.['150x150'] || undefined,
+              cover_url: trackMetadata?.artwork?.['480x480'] ||
+                        trackMetadata?.artwork?.['1000x1000'] ||
+                        trackMetadata?.artwork?.['150x150'] || undefined,
+              streamUrl: streamUrl || undefined,
+              url: streamUrl || undefined,
+            };
+          } catch (err) {
+            console.error(
+              `[useRoomQueue] Error resolviendo stream para ${item.track_id}:`,
+              err
+            );
+            return {
+              id: item.track_id,
+              title: item.title || item.track_id,
+              streamUrl: undefined,
+              url: undefined,
+            };
+          }
+        })
+      );
+
+      setQueue(tracksWithMetadata);
+      setError(null);
+    } catch (err) {
+      console.error("[useRoomQueue] error fetching queue", err);
+      setError(
+        err instanceof Error ? err.message : "Error al cargar la cola"
+      );
+    } finally {
+      setLoading(false);
+      isFetchingRef.current = false;
+    }
   }, [roomId]);
 
-  const addTrack = async (trackId: string, metadata?: {
+  // Fetch inicial
+  useEffect(() => {
+    fetchQueue();
+  }, [fetchQueue]);
+
+  // Polling cada 10 segundos para sincronizar la cola (reducido para evitar recargas)
+  useEffect(() => {
+    // Agregar un pequeño delay aleatorio para evitar que todas las pestañas hagan polling al mismo tiempo
+    const randomDelay = Math.random() * 2000; // 0-2 segundos
+
+    const startPolling = setTimeout(() => {
+      const interval = setInterval(() => {
+        // Solo hacer polling si el componente está montado y no hay un fetch en progreso
+        if (!isFetchingRef.current) {
+          console.log("[useRoomQueue] Sincronizando cola (polling)");
+          fetchQueue();
+        }
+      }, 10000); // 10 segundos
+
+      return () => clearInterval(interval);
+    }, randomDelay);
+
+    return () => {
+      clearTimeout(startPolling);
+    };
+  }, [fetchQueue]);
+
+  const addTrack = useCallback(async (trackId: string, metadata?: {
     title?: string;
     artist?: string;
     artworkUrl?: string;
     duration?: number;
   }) => {
     try {
-      console.log('[useRoomQueue] Añadiendo track:', trackId, metadata);
+      console.log("[useRoomQueue] Añadiendo track:", trackId, metadata);
 
-      // Obtener la URL de streaming real de Audius
+      // Resolver streamUrl
       const streamUrl = await getAudiusStreamUrl(trackId);
 
       if (!streamUrl) {
-        console.error('[useRoomQueue] No se pudo obtener URL de stream para:', trackId);
         throw new Error('No se pudo obtener la URL de streaming');
       }
 
-      console.log('[useRoomQueue] URL de stream obtenida:', streamUrl);
+      console.log("[useRoomQueue] StreamUrl obtenida:", streamUrl);
 
+      // Enviar al backend - IMPORTANTE: enviar el trackId de Audius, NO la streamUrl
+      await api.post(
+        `/api/rooms/${roomId}/queue`,
+        {
+          trackId: trackId,  // ID de Audius (ej: "4j0qa")
+          title: metadata?.title || "Nueva Canción",
+        },
+        true
+      );
+
+      console.log("[useRoomQueue] Track añadido exitosamente al backend");
+
+      // Actualizar cola inmediatamente (optimistic update)
       const newTrack: Track = {
-        id: trackId,           // Mantener el ID original de Audius
+        id: trackId,
         title: metadata?.title || "Nueva Canción",
-        artist: metadata?.artist || "",
-        duration: metadata?.duration || 240,
-        cover_url: metadata?.artworkUrl || "",
-        artworkUrl: metadata?.artworkUrl || "",
-        streamUrl: streamUrl,  // URL de streaming real
-        url: streamUrl,        // También en url por compatibilidad
+        artist: metadata?.artist,
+        duration: metadata?.duration,
+        artworkUrl: metadata?.artworkUrl,
+        cover_url: metadata?.artworkUrl,
+        streamUrl,
+        url: streamUrl,
       };
 
-      setQueue((prevQueue) => [...prevQueue, newTrack]);
+      setQueue((prev) => [...prev, newTrack]);
 
-      // Enviar al backend
-      await api.post(`/api/rooms/${roomId}/queue`, {
-        trackId: streamUrl,
-        title: metadata?.title || "Nueva Canción"
-      }, true);
+      // Recargar cola del servidor para confirmar y obtener metadatos completos
+      setTimeout(() => fetchQueue(), 1000);
 
-      console.log('[useRoomQueue] Track añadido exitosamente a la cola');
-    } catch (err: unknown) {
-      console.error('[useRoomQueue] Error al agregar track:', err);
-      setError(err instanceof Error ? err.message : "Error al agregar la canción.");
+      return { streamUrl };
+    } catch (err) {
+      console.error("[useRoomQueue] Error al añadir track:", err);
+      setError(
+        err instanceof Error ? err.message : "Error al añadir la canción"
+      );
       throw err;
     }
-  };
+  }, [roomId, fetchQueue]);
 
-  const skipTrack = async () => {
+  const removeTrack = useCallback(async (trackId: string) => {
     try {
-      const newQueue = queue.slice(1); 
-      setQueue(newQueue);
+      // Optimistic update
+      setQueue((prevQueue) => prevQueue.filter((t) => t.id !== trackId));
 
-      await api.post(`/api/rooms/${roomId}/queue/skip`, {}, true);
-    } catch (err: unknown) {
-      console.error('[useRoomQueue] Error al saltar track:', err);
-      setError(err instanceof Error ? err.message : "Error al saltar la canción.");
+      await api.delete(`/api/rooms/${roomId}/queue/${trackId}`, true);
+
+      console.log('[useRoomQueue] Track eliminado exitosamente');
+
+      // Recargar para confirmar
+      setTimeout(() => fetchQueue(), 500);
+    } catch (err) {
+      console.error('[useRoomQueue] Error al eliminar track:', err);
+      setError(err instanceof Error ? err.message : "Error al eliminar la canción.");
+
+      // Revertir optimistic update
+      await fetchQueue();
+
+      throw err;
     }
-  };
+  }, [roomId, fetchQueue]);
 
-  return { queue, loading, error, addTrack, skipTrack };
+  return {
+    queue,
+    loading,
+    error,
+    reload: fetchQueue,
+    addTrack,
+    removeTrack,
+  };
 }
+

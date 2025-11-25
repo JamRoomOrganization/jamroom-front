@@ -18,13 +18,10 @@ type PlayerNowProps = {
   onSkipClick?: () => void;
   onPreviousClick?: () => void;
   audioRef: React.RefObject<HTMLAudioElement | null>;
-  onChangeExternalTrack?: (opts: {
-    streamUrl: string;
-    title?: string;
-    artist?: string;
-    artworkUrl?: string;
-    source?: "audius" | "other";
-  }) => void;
+  isPlaying?: boolean;
+  onPlayPause?: (nextIsPlaying: boolean) => void;
+  onSeek?: (positionSeconds: number) => void;
+  hasUserInteracted?: boolean;
 };
 
 function fmt(sec = 0) {
@@ -40,13 +37,18 @@ const PlayerNow = React.memo(function PlayerNow({
   onSkipClick,
   onPreviousClick,
   audioRef,
-  onChangeExternalTrack,
+  isPlaying: isPlayingProp,
+  onPlayPause,
+  onSeek,
+  hasUserInteracted,
 }: PlayerNowProps) {
   const [pos, setPos] = React.useState(0);
   const [total, setTotal] = React.useState(track?.duration ?? 240);
-  const [isPlaying, setIsPlaying] = React.useState(false);
   const [volume, setVolume] = React.useState(1);
   const [isMuted, setIsMuted] = React.useState(false);
+
+  // Usar directamente isPlaying del prop (viene del sync-service)
+  const isPlaying = isPlayingProp ?? false;
 
   // Sincronizar con eventos del audio
   React.useEffect(() => {
@@ -55,8 +57,6 @@ const PlayerNow = React.memo(function PlayerNow({
 
     const handleTimeUpdate = () => setPos(audio.currentTime);
     const handleDurationChange = () => setTotal(audio.duration);
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
     const handleVolumeChange = () => setVolume(audio.volume);
     const handleEnded = () => {
       console.log('[PlayerNow] Canción terminada, saltando a siguiente');
@@ -65,53 +65,28 @@ const PlayerNow = React.memo(function PlayerNow({
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('durationchange', handleDurationChange);
-    audio.addEventListener('play', handlePlay);
-    audio.addEventListener('pause', handlePause);
     audio.addEventListener('volumechange', handleVolumeChange);
     audio.addEventListener('ended', handleEnded);
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('durationchange', handleDurationChange);
-      audio.removeEventListener('play', handlePlay);
-      audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('volumechange', handleVolumeChange);
       audio.removeEventListener('ended', handleEnded);
     };
   }, [audioRef, onSkipClick]);
 
-  // Cargar nueva pista
-  React.useEffect(() => {
-    const audio = audioRef.current;
-    const streamUrl = track?.streamUrl || track?.url;
-
-    if (!audio || !streamUrl) return;
-
-    console.log('[PlayerNow] Cargando nueva pista:', streamUrl);
-
-    audio.src = streamUrl;
-    audio.load();
-
-    audio.play().catch(error => {
-      console.error('[PlayerNow] Error al intentar reproducir:', error);
-    });
-
-    setPos(0);
-  }, [track?.id, track?.streamUrl, track?.url, audioRef]);
-
   const pct = Math.min(100, (pos / Math.max(total, 1)) * 100);
 
-  // Control de reproducción/pausa
+  // Control de reproducción/pausa - Delegar completamente al servidor
   const togglePlayPause = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
+    console.log('[PlayerNow] togglePlayPause clicked, current isPlaying:', isPlaying);
 
-    if (isPlaying) {
-      audio.pause();
-    } else {
-      audio.play().catch(error => {
-        console.error('[PlayerNow] Error al reproducir:', error);
-      });
+    // Solo notificar al servidor, él enviará syncPacket que controlará el audio
+    if (onPlayPause) {
+      const nextState = !isPlaying;
+      console.log('[PlayerNow] Notificando cambio a servidor, nextState:', nextState);
+      onPlayPause(nextState);
     }
   };
 
@@ -150,12 +125,19 @@ const PlayerNow = React.memo(function PlayerNow({
 
   // Buscar en la pista
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    audio.currentTime = (x / rect.width) * total;
+    const targetSeconds = (x / rect.width) * total;
+
+    if (onSeek) {
+      // Si el padre controla la lógica, delegamos en él
+      onSeek(targetSeconds);
+    } else {
+      // Fallback: comportamiento local actual
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.currentTime = targetSeconds;
+    }
   };
 
   return (
@@ -196,6 +178,30 @@ const PlayerNow = React.memo(function PlayerNow({
         </div>
       </div>
 
+      {/* Mensaje de advertencia si se requiere interacción del usuario */}
+      {isPlaying && !hasUserInteracted && (
+        <div
+          className="mb-4 p-4 bg-yellow-500/30 border-2 border-yellow-500 rounded-xl text-yellow-100 cursor-pointer hover:bg-yellow-500/40 transition-all animate-pulse"
+          onClick={() => {
+            console.log('[PlayerNow] Usuario hizo clic en el banner de advertencia');
+            const audio = audioRef.current;
+            if (audio && audio.paused) {
+              audio.play().catch(err => console.error('[PlayerNow] Error al reproducir:', err));
+            }
+          }}
+        >
+          <p className="flex items-center gap-3 text-base font-semibold">
+            <svg className="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            <span>🎵 Haz clic aquí para activar el audio y comenzar a escuchar</span>
+          </p>
+          <p className="mt-2 text-sm text-yellow-200 ml-9">
+            Los navegadores requieren una interacción del usuario antes de reproducir audio automáticamente.
+          </p>
+        </div>
+      )}
+
       {/* Información de la pista */}
       <div className="flex items-start gap-4 mb-6">
         <div className="relative w-24 h-24 rounded-2xl overflow-hidden shrink-0 border border-slate-700/60">
@@ -228,12 +234,29 @@ const PlayerNow = React.memo(function PlayerNow({
           aria-valuemax={total}
           aria-valuenow={pos}
           onClick={handleSeek}
-          className="w-full h-3 rounded-full bg-slate-700 cursor-pointer hover:h-4 transition-all"
+          className="relative w-full h-3 rounded-full bg-slate-700 cursor-pointer hover:h-4 transition-all group"
         >
           <div
-            className="h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all"
+            className={`h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all relative ${
+              isPlaying ? 'animate-pulse-slow' : ''
+            }`}
             style={{ width: `${pct}%` }}
-          />
+          >
+            {/* Efecto de onda de sonido - Visualizador moderno */}
+            {isPlaying && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                <span className="w-1 h-6 bg-white rounded-full animate-soundwave" style={{ animationDelay: '0s' }} />
+                <span className="w-1 h-8 bg-white rounded-full animate-soundwave" style={{ animationDelay: '0.2s' }} />
+                <span className="w-1 h-5 bg-white rounded-full animate-soundwave" style={{ animationDelay: '0.4s' }} />
+                <span className="w-1 h-7 bg-white rounded-full animate-soundwave" style={{ animationDelay: '0.6s' }} />
+                <span className="w-1 h-6 bg-white rounded-full animate-soundwave" style={{ animationDelay: '0.8s' }} />
+              </div>
+            )}
+          </div>
+          {/* Indicador hover */}
+          <div className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            <div className="absolute inset-0 rounded-full ring-2 ring-purple-400/30" />
+          </div>
         </div>
         <div className="flex justify-between text-xs text-slate-400 mt-2">
           <span>{fmt(pos)}</span>
