@@ -1,18 +1,18 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import Header from "@/components/Header";
 import PlayerNow from "@/components/PlayerNow";
 import QueueList from "@/components/QueueList";
 import ChatPanel from "@/components/ChatPanel";
 import ParticipantsList from "@/components/ParticipantsList";
-import { useRoom } from "@/hooks/useRoom";
+import { useRoom } from "@/hooks/useRoom";              // 👈 IMPORT NOMBRADO
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, useParams } from "next/navigation";
 import InviteDialog from "@/components/InviteDialog";
 import AddSongDialog from "@/components/AddSongDialog";
 import { useRoomMembers } from "@/hooks/useRoomMembers";
-import { useRoomQueue } from "@/hooks/useRoomQueue";
+import { useRoomQueue } from "@/hooks/useRoomQueue";     // 👈 Hook separado
 import type { Track } from "@/types";
 
 export default function RoomPage() {
@@ -32,41 +32,37 @@ export default function RoomPage() {
         emitPlayPause,
         emitSeek,
         playbackState,
-        currentTrackId,
+        currentTrackId, // 👈 ID lógico Audius
         hasUserInteracted,
+        forcePlay,
     } = useRoom(roomId);
 
     const [inviteOpen, setInviteOpen] = React.useState(false);
     const [addOpen, setAddOpen] = React.useState(false);
 
-    const {
-        members,
-        error: membersError,
-    } = useRoomMembers(roomId);
+    const { members, error: membersError } = useRoomMembers(roomId);
 
-    const {
-        queue,
-        loading: queueLoading,
-        addTrack,
-    } = useRoomQueue(roomId);
+    const { queue, loading: queueLoading, addTrack } = useRoomQueue(roomId);
 
-    // Derivar currentTrack de la cola Y del currentTrackId de useRoom
-    const currentTrack = React.useMemo(() => {
+    // Derivar currentTrack de la cola y del currentTrackId lógico
+    const currentTrack: Track | undefined = React.useMemo(() => {
         if (!queue || queue.length === 0) return undefined;
 
-        // Si tenemos currentTrackId del sync, buscar por streamUrl
         if (currentTrackId) {
-            const match = queue.find(
-                (t) => t.streamUrl === currentTrackId || t.url === currentTrackId
-            );
+            const match = queue.find((t) => t.id === currentTrackId);
             if (match) {
-                console.log("[Room] currentTrack encontrado por currentTrackId:", match);
+                console.log(
+                    "[Room] currentTrack encontrado por currentTrackId:",
+                    match
+                );
                 return match;
             }
         }
 
-        // Fallback: primer elemento de la cola
-        console.log("[Room] currentTrack usando primer elemento de la cola:", queue[0]);
+        console.log(
+            "[Room] currentTrack usando primer elemento de la cola:",
+            queue[0]
+        );
         return queue[0];
     }, [queue, currentTrackId]);
 
@@ -89,7 +85,7 @@ export default function RoomPage() {
         }
 
         const previousTrack = queue[currentIndex - 1];
-        const streamUrl = previousTrack.streamUrl || previousTrack.url;
+        const streamUrl = previousTrack.streamUrl;
 
         if (!streamUrl) {
             console.warn("[Room] previousTrack sin streamUrl válido");
@@ -97,10 +93,13 @@ export default function RoomPage() {
         }
 
         console.log("[Room] Cambiando a canción anterior:", previousTrack);
-        await changeTrackFromExternalStream({ streamUrl });
+        await changeTrackFromExternalStream({
+            trackId: previousTrack.id, // ID lógico Audius
+            streamUrl,
+        });
     }, [queue, currentTrack, changeTrackFromExternalStream]);
 
-    // Handler para seleccionar canción específica
+    // Handler para seleccionar canción específica desde la cola
     const handleSelectTrack = React.useCallback(
         async (trackId: string) => {
             if (!queue) return;
@@ -108,17 +107,20 @@ export default function RoomPage() {
             const selectedTrack = queue.find((t) => t.id === trackId);
             if (!selectedTrack) return;
 
-            const streamUrl = selectedTrack.streamUrl || selectedTrack.url;
+            const streamUrl = selectedTrack.streamUrl;
 
             if (!streamUrl) {
                 console.warn("[Room] selectedTrack sin streamUrl válido");
                 return;
             }
 
-            console.log("[Room] Cambiando a canción seleccionada:", selectedTrack);
-            await changeTrackFromExternalStream({ streamUrl });
+            console.log("[Room] 🎵 Reproduciendo canción seleccionada:", selectedTrack);
+            await changeTrackFromExternalStream({
+                trackId: selectedTrack.id,
+                streamUrl,
+            });
         },
-        [queue, changeTrackFromExternalStream],
+        [queue, changeTrackFromExternalStream]
     );
 
     // Handler para canción siguiente
@@ -134,7 +136,7 @@ export default function RoomPage() {
         }
 
         const nextTrack = queue[nextIndex];
-        const streamUrl = nextTrack.streamUrl || nextTrack.url;
+        const streamUrl = nextTrack.streamUrl;
 
         if (!streamUrl) {
             console.warn("[Room] nextTrack sin streamUrl válido");
@@ -142,31 +144,73 @@ export default function RoomPage() {
         }
 
         console.log("[Room] Saltando a siguiente:", nextTrack);
-        await changeTrackFromExternalStream({ streamUrl });
+        await changeTrackFromExternalStream({
+            trackId: nextTrack.id, // ID lógico Audius
+            streamUrl,
+        });
     }, [queue, currentTrack, changeTrackFromExternalStream]);
 
-    // Handler para añadir y reproducir inmediatamente
-    const handleAddAndPlay = React.useCallback(async (trackId: string, metadata?: {
-        title?: string;
-        artist?: string;
-        artworkUrl?: string;
-        duration?: number;
-    }) => {
-        try {
-            // Añadir a la cola
-            const { streamUrl } = await addTrack(trackId, metadata);
+    // Añadir a la cola sin reproducir automáticamente
+    const handleAddAndPlay = React.useCallback(
+        async (
+            trackId: string,
+            metadata?: {
+                title?: string;
+                artist?: string;
+                artworkUrl?: string;
+                duration?: number;
+            }
+        ) => {
+            try {
+                console.log("[Room] 📝 Agregando canción a la cola (sin reproducir)");
 
-            // Reproducir inmediatamente
-            await changeTrackFromExternalStream({ streamUrl });
-        } catch (err) {
-            console.error("[Room] Error al añadir y reproducir:", err);
-        }
-    }, [addTrack, changeTrackFromExternalStream]);
+                // Solo agregar a la cola, NO reproducir automáticamente
+                await addTrack(trackId, metadata);
+
+                console.log("[Room] ✅ Canción agregada a la cola exitosamente");
+            } catch (err) {
+                console.error("[Room] ❌ Error al agregar canción:", err);
+            }
+        },
+        [addTrack]
+    );
+
+    // Adaptador para onChangeExternalTrack del diálogo (Audius)
+    const handleChangeExternalTrack = React.useCallback(
+        (opts: {
+            trackId: string;
+            streamUrl: string;
+            title: string;
+            artist?: string;
+            artworkUrl?: string;
+            source?: "audius" | "other";
+        }) => {
+            // 1) Cambiar el track en sync-service con ID lógico + streamUrl local
+            changeTrackFromExternalStream({
+                trackId: opts.trackId,
+                streamUrl: opts.streamUrl,
+            });
+
+            // 2) Si quisieras que además se añada a la cola:
+            // addTrack(opts.trackId, {
+            //   title: opts.title,
+            //   artist: opts.artist,
+            //   artworkUrl: opts.artworkUrl,
+            // });
+        },
+        [changeTrackFromExternalStream]
+    );
+
+    // Memorizar handlers críticos para evitar re-renders innecesarios
+    const stableHandlers = useMemo(() => ({
+        onPrevious: handlePrevious,
+        onNext: handleNext,
+        onSelectTrack: handleSelectTrack,
+    }), [handlePrevious, handleNext, handleSelectTrack]);
 
     // A PARTIR DE AQUÍ: NINGÚN HOOK MÁS, SOLO LÓGICA Y RETURNS
 
     if (!user && !authLoading) {
-        // Mientras redirige a login, no mostramos nada
         return null;
     }
 
@@ -187,8 +231,8 @@ export default function RoomPage() {
     if (error) {
         const is404 =
             error.includes("404") ||
-            error.includes("not found") ||
-            error.includes("no existe");
+            error.toLowerCase().includes("not found") ||
+            error.toLowerCase().includes("no existe");
 
         const isAuthError = socketStatus === "authError";
 
@@ -205,9 +249,7 @@ export default function RoomPage() {
                     >
                         <div
                             className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
-                                is404
-                                    ? "bg-yellow-500/20"
-                                    : "bg-red-500/20"
+                                is404 ? "bg-yellow-500/20" : "bg-red-500/20"
                             }`}
                         >
                             {is404 ? (
@@ -251,9 +293,7 @@ export default function RoomPage() {
 
                         <p
                             className={`mb-6 ${
-                                is404
-                                    ? "text-yellow-200"
-                                    : "text-red-200"
+                                is404 ? "text-yellow-200" : "text-red-200"
                             }`}
                         >
                             {is404
@@ -288,9 +328,7 @@ export default function RoomPage() {
                                         </button>
                                     ) : (
                                         <button
-                                            onClick={() =>
-                                                window.location.reload()
-                                            }
+                                            onClick={() => window.location.reload()}
                                             className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors"
                                         >
                                             Reintentar
@@ -316,7 +354,7 @@ export default function RoomPage() {
         );
     }
 
-    const participantsFromMembers = members.map((m) => ({
+    const participants = members.map((m) => ({
         id: m.user_id,
         name: m.username || m.user_id,
         roles: m.roles,
@@ -324,8 +362,6 @@ export default function RoomPage() {
         canAddTracks: m.can_add_tracks,
         canInvite: m.can_invite,
     }));
-
-    const participants = participantsFromMembers;
 
     const syncLabel =
         socketStatus === "connected"
@@ -359,31 +395,31 @@ export default function RoomPage() {
                             <div className="mt-1 flex items-center gap-3 text-sm text-slate-400">
                                 <span>Sala de colaboración musical</span>
                                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-900/60 text-slate-100 border border-slate-700/80">
-                                  <span
-                                      className={[
-                                          "w-2 h-2 rounded-full",
-                                          syncDotClass,
-                                          socketStatus === "connected" ||
-                                          socketStatus === "connecting"
-                                              ? "animate-pulse"
-                                              : "",
-                                      ].join(" ")}
-                                  />
+                                    <span
+                                        className={[
+                                            "w-2 h-2 rounded-full",
+                                            syncDotClass,
+                                            socketStatus === "connected" ||
+                                            socketStatus === "connecting"
+                                                ? "animate-pulse"
+                                                : "",
+                                        ].join(" ")}
+                                    />
                                     {syncLabel}
                                 </span>
                                 {!!participants.length && (
                                     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-200 border border-slate-600">
-                                      <svg
-                                          width="14"
-                                          height="14"
-                                          viewBox="0 0 24 24"
-                                          className="opacity-80"
-                                      >
-                                        <path
-                                            fill="currentColor"
-                                            d="M12 12a5 5 0 1 0-5-5a5 5 0 0 0 5 5m-7 8a7 7 0 0 1 14 0z"
-                                        />
-                                      </svg>
+                                        <svg
+                                            width="14"
+                                            height="14"
+                                            viewBox="0 0 24 24"
+                                            className="opacity-80"
+                                        >
+                                            <path
+                                                fill="currentColor"
+                                                d="M12 12a5 5 0 1 0-5-5a5 5 0 0 0 5 5m-7 8a7 7 0 0 1 14 0z"
+                                            />
+                                        </svg>
                                         {participants.length}
                                     </span>
                                 )}
@@ -419,13 +455,13 @@ export default function RoomPage() {
                             onPlayPause={emitPlayPause}
                             onSeek={emitSeek}
                             hasUserInteracted={hasUserInteracted}
+                            forcePlay={forcePlay}
                         />
 
                         <QueueList
                             queue={queue}
                             currentTrack={currentTrack}
                             onAddClick={() => setAddOpen(true)}
-                            onSkipClick={handleNext}
                             onSelectTrack={handleSelectTrack}
                         />
                     </div>
@@ -447,7 +483,7 @@ export default function RoomPage() {
                 open={addOpen}
                 onOpenChange={setAddOpen}
                 onAddSong={handleAddAndPlay}
-                onChangeExternalTrack={changeTrackFromExternalStream}
+                onChangeExternalTrack={handleChangeExternalTrack}
             />
         </div>
     );

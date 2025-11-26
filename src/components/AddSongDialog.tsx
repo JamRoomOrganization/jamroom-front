@@ -1,40 +1,50 @@
 "use client";
 
 import React from "react";
-import { AudiusTrack, searchAudiusTracks, getAudiusStreamUrl } from "@/lib/audiusClient";
+import {
+    AudiusTrack,
+    searchAudiusTracks,
+    getAudiusStreamUrl,
+} from "@/lib/audiusClient";
 
 type AddSongDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onChangeExternalTrack?: (opts: {
-        streamUrl: string;
+        trackId: string;           // ID lógico Audius
+        streamUrl: string;         // URL reproducible
         title: string;
         artist?: string;
         artworkUrl?: string;
         source?: "audius" | "other";
     }) => void;
-    onAddSong?: (trackId: string, metadata?: {
-        title?: string;
-        artist?: string;
-        artworkUrl?: string;
-        duration?: number;
-    }) => Promise<void>;
+    onAddSong?: (
+        trackId: string,
+        metadata?: {
+            title?: string;
+            artist?: string;
+            artworkUrl?: string;
+            duration?: number;
+        },
+    ) => Promise<void>;
 };
 
 export default function AddSongDialog({
-    open,
-    onOpenChange,
-    onChangeExternalTrack,
-    onAddSong,
-}: AddSongDialogProps) {
+                                          open,
+                                          onOpenChange,
+                                          onChangeExternalTrack,
+                                          onAddSong,
+                                      }: AddSongDialogProps) {
     const [query, setQuery] = React.useState("");
     const [results, setResults] = React.useState<AudiusTrack[]>([]);
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
     const [trackIdInput, setTrackIdInput] = React.useState("");
-    const [activeTab, setActiveTab] = React.useState<"search" | "manual">("search");
+    const [activeTab, setActiveTab] = React.useState<"search" | "manual">(
+        "search",
+    );
 
-    // Busca en Audius cuando envías el formulario
+    // Buscar en Audius
     async function handleSearch(e: React.FormEvent) {
         e.preventDefault();
         const trimmed = query.trim();
@@ -56,65 +66,75 @@ export default function AddSongDialog({
         }
     }
 
-    // Cuando el usuario selecciona un track de la lista
+    // Selección de track desde resultados
     async function handleSelectTrack(track: AudiusTrack) {
         try {
             setError(null);
 
-            // Si tenemos onAddSong, usarlo para añadir a la cola
-            if (onAddSong) {
-                const artworkUrl = track.artwork?.["480x480"] ??
-                                  track.artwork?.["1000x1000"] ??
-                                  track.artwork?.["150x150"];
+            const artworkUrl =
+                track.artwork?.["480x480"] ??
+                track.artwork?.["1000x1000"] ??
+                track.artwork?.["150x150"];
+            const artist =
+                track.user?.name ?? track.user?.handle ?? "Audius";
 
+            // Caso 1: añadir a la cola (queue-service)
+            if (onAddSong) {
                 await onAddSong(track.id, {
                     title: track.title,
-                    artist: track.user?.name ?? track.user?.handle ?? "Audius",
-                    artworkUrl: artworkUrl,
+                    artist,
+                    artworkUrl,
                 });
                 onOpenChange(false);
                 return;
             }
 
-            // Si tenemos onChangeExternalTrack, usarlo para cambiar track actual
+            // Caso 2: cambiar track actual vía sync-service
             if (onChangeExternalTrack) {
-                console.log('[AddSongDialog] Obteniendo stream URL para track:', track.id);
+                console.log(
+                    "[AddSongDialog] Obteniendo stream URL para track:",
+                    track.id,
+                );
 
                 const streamUrl = await getAudiusStreamUrl(track.id);
 
                 if (!streamUrl) {
-                    setError("No se pudo obtener el stream de este track. Intenta con otro.");
+                    setError(
+                        "No se pudo obtener el stream de este track. Intenta con otro.",
+                    );
                     return;
                 }
 
-                console.log('[AddSongDialog] Stream URL obtenida:', streamUrl);
+                console.log(
+                    "[AddSongDialog] Stream URL obtenida:",
+                    streamUrl,
+                );
 
                 onChangeExternalTrack({
+                    trackId: track.id, // ID lógico que se guarda en Redis
                     streamUrl,
                     title: track.title,
-                    artist: track.user?.name ?? track.user?.handle ?? "Audius",
-                    artworkUrl:
-                        track.artwork?.["480x480"] ??
-                        track.artwork?.["1000x1000"] ??
-                        track.artwork?.["150x150"],
+                    artist,
+                    artworkUrl,
                     source: "audius",
                 });
 
-                // Cerrar el diálogo después de seleccionar
                 onOpenChange(false);
             }
         } catch (err: unknown) {
             console.error("[AddSongDialog] handleSelectTrack error", err);
-            setError("Error al preparar la reproducción de este track. Por favor, intenta con otro.");
+            setError(
+                "Error al preparar la reproducción de este track. Por favor, intenta con otro.",
+            );
         }
     }
 
-    // Manejar añadir por track ID manualmente
+    // Añadir por ID manual (para pruebas)
     const handleManualAdd = async () => {
         if (trackIdInput.trim() && onAddSong) {
             try {
                 await onAddSong(trackIdInput, {
-                    title: "Canción añadida"
+                    title: "Canción añadida",
                 });
                 setTrackIdInput("");
                 onOpenChange(false);
@@ -125,7 +145,6 @@ export default function AddSongDialog({
         }
     };
 
-    // Si no está abierto, no renderizar
     if (!open) return null;
 
     return (
@@ -147,8 +166,8 @@ export default function AddSongDialog({
                 <div className="flex border-b border-slate-700 mb-4">
                     <button
                         className={`flex-1 py-2 text-sm font-medium ${
-                            activeTab === "search" 
-                                ? "text-purple-400 border-b-2 border-purple-400" 
+                            activeTab === "search"
+                                ? "text-purple-400 border-b-2 border-purple-400"
                                 : "text-slate-400"
                         }`}
                         onClick={() => setActiveTab("search")}
@@ -157,8 +176,8 @@ export default function AddSongDialog({
                     </button>
                     <button
                         className={`flex-1 py-2 text-sm font-medium ${
-                            activeTab === "manual" 
-                                ? "text-purple-400 border-b-2 border-purple-400" 
+                            activeTab === "manual"
+                                ? "text-purple-400 border-b-2 border-purple-400"
                                 : "text-slate-400"
                         }`}
                         onClick={() => setActiveTab("manual")}
@@ -170,11 +189,16 @@ export default function AddSongDialog({
                 {activeTab === "search" ? (
                     <>
                         {/* Formulario de búsqueda */}
-                        <form onSubmit={handleSearch} className="flex gap-2 mb-4">
+                        <form
+                            onSubmit={handleSearch}
+                            className="flex gap-2 mb-4"
+                        >
                             <input
                                 type="text"
                                 value={query}
-                                onChange={(e) => setQuery(e.target.value)}
+                                onChange={(e) =>
+                                    setQuery(e.target.value)
+                                }
                                 placeholder="Buscar por título o artista…"
                                 className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500"
                             />
@@ -193,21 +217,26 @@ export default function AddSongDialog({
                             </p>
                         )}
 
-                        {/* Lista de resultados */}
+                        {/* Resultados */}
                         <div className="max-h-72 overflow-y-auto space-y-2">
                             {results.map((track) => (
                                 <button
                                     key={track.id}
                                     type="button"
-                                    onClick={() => handleSelectTrack(track)}
+                                    onClick={() =>
+                                        handleSelectTrack(track)
+                                    }
                                     className="w-full flex items-center gap-3 rounded-lg bg-slate-800/60 hover:bg-slate-700/80 border border-slate-700 px-3 py-2 text-left transition"
                                 >
-                                    {/* Artwork */}
                                     <div className="w-10 h-10 rounded-md bg-slate-700 overflow-hidden flex-shrink-0">
                                         {track.artwork?.["150x150"] && (
                                             // eslint-disable-next-line @next/next/no-img-element
                                             <img
-                                                src={track.artwork["150x150"]}
+                                                src={
+                                                    track.artwork[
+                                                        "150x150"
+                                                        ]!
+                                                }
                                                 alt={track.title}
                                                 className="w-full h-full object-cover"
                                             />
@@ -219,29 +248,40 @@ export default function AddSongDialog({
                                             {track.title}
                                         </p>
                                         <p className="text-xs text-slate-400 truncate">
-                                            {track.user?.name ?? track.user?.handle ?? "Audius"}
+                                            {track.user?.name ??
+                                                track.user?.handle ??
+                                                "Audius"}
                                         </p>
                                     </div>
                                 </button>
                             ))}
 
-                            {!loading && !results.length && !error && (
-                                <p className="text-xs text-slate-500">
-                                    Escribe algo y pulsa &quot;Buscar&quot; para ver resultados desde Audius.
-                                </p>
-                            )}
+                            {!loading &&
+                                !results.length &&
+                                !error && (
+                                    <p className="text-xs text-slate-500">
+                                        Escribe algo y pulsa &quot;Buscar&quot;
+                                        para ver resultados desde Audius.
+                                    </p>
+                                )}
                         </div>
                     </>
                 ) : (
                     <>
                         {/* Formulario manual por ID */}
                         <p className="text-slate-400 text-sm mb-4">
-                            Para la demo, pega un <span className="text-slate-300 font-mono">trackId</span>.
+                            Para la demo, pega un{" "}
+                            <span className="text-slate-300 font-mono">
+                                trackId
+                            </span>
+                            .
                         </p>
 
                         <input
                             value={trackIdInput}
-                            onChange={(e) => setTrackIdInput(e.target.value)}
+                            onChange={(e) =>
+                                setTrackIdInput(e.target.value)
+                            }
                             placeholder="p. ej. a1b2c3"
                             className="w-full px-3 py-2 rounded-lg bg-slate-800 text-slate-100 border border-slate-700 mb-4"
                         />

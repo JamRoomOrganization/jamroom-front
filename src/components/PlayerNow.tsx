@@ -22,6 +22,7 @@ type PlayerNowProps = {
   onPlayPause?: (nextIsPlaying: boolean) => void;
   onSeek?: (positionSeconds: number) => void;
   hasUserInteracted?: boolean;
+  forcePlay?: () => Promise<boolean>;
 };
 
 function fmt(sec = 0) {
@@ -41,6 +42,7 @@ const PlayerNow = React.memo(function PlayerNow({
   onPlayPause,
   onSeek,
   hasUserInteracted,
+  forcePlay,
 }: PlayerNowProps) {
   const [pos, setPos] = React.useState(0);
   const [total, setTotal] = React.useState(track?.duration ?? 240);
@@ -58,23 +60,42 @@ const PlayerNow = React.memo(function PlayerNow({
     const handleTimeUpdate = () => setPos(audio.currentTime);
     const handleDurationChange = () => setTotal(audio.duration);
     const handleVolumeChange = () => setVolume(audio.volume);
+
     const handleEnded = () => {
       console.log('[PlayerNow] Canción terminada, saltando a siguiente');
       onSkipClick?.();
+    };
+
+    const handleStalled = () => {
+      console.warn('[PlayerNow] Audio detenido (stalled), intentando reanudar');
+      if (!audio.paused && isPlaying) {
+        audio.load();
+        audio.play().catch(err => {
+          console.error('[PlayerNow] Error al reanudar tras stalled:', err);
+        });
+      }
+    };
+
+    const handleWaiting = () => {
+      console.log('[PlayerNow] Audio buffering...');
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('durationchange', handleDurationChange);
     audio.addEventListener('volumechange', handleVolumeChange);
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('stalled', handleStalled);
+    audio.addEventListener('waiting', handleWaiting);
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('durationchange', handleDurationChange);
       audio.removeEventListener('volumechange', handleVolumeChange);
       audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('stalled', handleStalled);
+      audio.removeEventListener('waiting', handleWaiting);
     };
-  }, [audioRef, onSkipClick]);
+  }, [audioRef, onSkipClick, isPlaying]);
 
   const pct = Math.min(100, (pos / Math.max(total, 1)) * 100);
 
@@ -82,10 +103,16 @@ const PlayerNow = React.memo(function PlayerNow({
   const togglePlayPause = () => {
     console.log('[PlayerNow] togglePlayPause clicked, current isPlaying:', isPlaying);
 
+    // Evitar emitir si no hay ninguna canción cargada
+    if (!track) {
+      console.warn('[PlayerNow] ⚠ No hay pista seleccionada');
+      return;
+    }
+
     // Solo notificar al servidor, él enviará syncPacket que controlará el audio
     if (onPlayPause) {
       const nextState = !isPlaying;
-      console.log('[PlayerNow] Notificando cambio a servidor, nextState:', nextState);
+      console.log('[PlayerNow] 🎵 Cambiando estado a:', nextState ? 'playing' : 'paused');
       onPlayPause(nextState);
     }
   };
@@ -147,7 +174,7 @@ const PlayerNow = React.memo(function PlayerNow({
         ref={audioRef}
         className="hidden"
         crossOrigin="anonymous"
-        preload="metadata"
+        preload="auto"
         onError={(e) => {
           console.error('[PlayerNow] Error al cargar audio:', e);
           const target = e.target as HTMLAudioElement;
@@ -181,23 +208,46 @@ const PlayerNow = React.memo(function PlayerNow({
       {/* Mensaje de advertencia si se requiere interacción del usuario */}
       {isPlaying && !hasUserInteracted && (
         <div
-          className="mb-4 p-4 bg-yellow-500/30 border-2 border-yellow-500 rounded-xl text-yellow-100 cursor-pointer hover:bg-yellow-500/40 transition-all animate-pulse"
-          onClick={() => {
-            console.log('[PlayerNow] Usuario hizo clic en el banner de advertencia');
+          className="mb-4 p-4 bg-gradient-to-r from-yellow-500/40 to-orange-500/40 border-2 border-yellow-400 rounded-xl text-white cursor-pointer hover:from-yellow-500/50 hover:to-orange-500/50 transition-all animate-pulse shadow-lg shadow-yellow-500/30"
+          onClick={async () => {
+            console.log('[PlayerNow] Banner clickeado - reproducción inmediata');
+
             const audio = audioRef.current;
-            if (audio && audio.paused) {
-              audio.play().catch(err => console.error('[PlayerNow] Error al reproducir:', err));
+            if (!audio) {
+              console.warn('[PlayerNow] No hay ref de audio');
+              return;
+            }
+
+            try {
+              // ✅ Reproducir INMEDIATAMENTE sin esperar forcePlay
+              await audio.play();
+
+              console.log('[PlayerNow] ✓ Reproducción iniciada (sin delay)');
+
+              // ✅ Notificar al servidor DESPUÉS (no bloquea la UI)
+              if (forcePlay) {
+                forcePlay().catch(err => {
+                  console.warn('[PlayerNow] Error en forcePlay (no crítico):', err);
+                });
+              }
+            } catch (err: any) {
+              console.error('[PlayerNow] Error al reproducir:', err);
+
+              // Solo si falla, intentar con forcePlay
+              if (forcePlay && err.name === 'NotAllowedError') {
+                await forcePlay();
+              }
             }
           }}
         >
-          <p className="flex items-center gap-3 text-base font-semibold">
-            <svg className="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          <p className="flex items-center gap-3 text-lg font-bold">
+            <svg className="w-7 h-7 flex-shrink-0 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
             </svg>
-            <span>🎵 Haz clic aquí para activar el audio y comenzar a escuchar</span>
+            <span>🎵 ¡Haz clic aquí para activar el audio!</span>
           </p>
-          <p className="mt-2 text-sm text-yellow-200 ml-9">
-            Los navegadores requieren una interacción del usuario antes de reproducir audio automáticamente.
+          <p className="mt-2 text-sm text-yellow-100 ml-10 font-medium">
+            Hay música reproduciéndose. Los navegadores requieren tu interacción para comenzar a escuchar.
           </p>
         </div>
       )}
@@ -237,22 +287,9 @@ const PlayerNow = React.memo(function PlayerNow({
           className="relative w-full h-3 rounded-full bg-slate-700 cursor-pointer hover:h-4 transition-all group"
         >
           <div
-            className={`h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all relative ${
-              isPlaying ? 'animate-pulse-slow' : ''
-            }`}
+            className="h-full rounded-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all relative"
             style={{ width: `${pct}%` }}
-          >
-            {/* Efecto de onda de sonido - Visualizador moderno */}
-            {isPlaying && (
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                <span className="w-1 h-6 bg-white rounded-full animate-soundwave" style={{ animationDelay: '0s' }} />
-                <span className="w-1 h-8 bg-white rounded-full animate-soundwave" style={{ animationDelay: '0.2s' }} />
-                <span className="w-1 h-5 bg-white rounded-full animate-soundwave" style={{ animationDelay: '0.4s' }} />
-                <span className="w-1 h-7 bg-white rounded-full animate-soundwave" style={{ animationDelay: '0.6s' }} />
-                <span className="w-1 h-6 bg-white rounded-full animate-soundwave" style={{ animationDelay: '0.8s' }} />
-              </div>
-            )}
-          </div>
+          />
           {/* Indicador hover */}
           <div className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
             <div className="absolute inset-0 rounded-full ring-2 ring-purple-400/30" />
@@ -288,7 +325,8 @@ const PlayerNow = React.memo(function PlayerNow({
 
           <button
             onClick={togglePlayPause}
-            className="p-4 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white transition-all shadow-lg hover:scale-105"
+            disabled={!track}
+            className="p-4 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white transition-all shadow-lg hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed"
             title={isPlaying ? 'Pausar' : 'Reproducir'}
           >
             {isPlaying ? <Pause size={24} /> : <Play size={24} />}
