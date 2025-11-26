@@ -45,14 +45,11 @@ function parseJwt(token: string): any {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Modo de desarrollo para saltarse autenticación
   const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === 'true';
 
-  // 👇 IMPORTANTE: mismo valor inicial en server y cliente
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Hidratamos desde localStorage SOLO en el cliente, DESPUÉS de la hidratación
   useEffect(() => {
     try {
       const idToken = localStorage.getItem("idToken");
@@ -66,13 +63,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         id: payload.sub,
         email: payload.email ?? "",
         name:
+          payload.nickname ??
           payload.name ??
           payload["cognito:username"] ??
           payload.username ??
           undefined,
       });
     } catch {
-      // si hay basura en localStorage, limpiamos
       localStorage.removeItem("idToken");
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
@@ -86,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('[Auth] Attempting login to backend...');
 
-      const tokens = await api.post<LoginResponse>("/auth/login", {
+      const tokens = await api.post<LoginResponse>("/api/auth/login", {
         email,
         password,
       });
@@ -104,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         id: payload.sub,
         email: payload.email ?? email,
         name:
+          payload.nickname ??
           payload.name ??
           payload["cognito:username"] ??
           payload.username ??
@@ -112,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('[Auth] Login error:', error);
       setLoading(false);
-      throw error; // Re-lanzar para que el componente de login lo maneje
+      throw error; 
     } finally {
       setLoading(false);
     }

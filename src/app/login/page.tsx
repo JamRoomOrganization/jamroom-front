@@ -88,8 +88,8 @@ export default function LoginPage() {
 
             <div className="text-center text-sm text-slate-400">
               ¿No tienes cuenta? {" "}
-              <Link href="#" className="text-slate-200 hover:text-white underline underline-offset-4">
-                Crea una aqui!
+              <Link href="/register" className="text-slate-200 hover:text-white underline underline-offset-4">
+                Crea una aquí!
               </Link>
             </div>
           </form>
