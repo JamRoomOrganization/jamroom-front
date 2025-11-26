@@ -23,47 +23,44 @@ const QueueList = React.memo(function QueueList({
   queue = [],
   currentTrack,
   onAddClick,
-  onSkipClick,
   onSelectTrack,
 }: {
   queue?: Track[];
   currentTrack?: Track;
   onAddClick?: () => void;
-  onSkipClick?: () => void;
   onSelectTrack?: (trackId: string) => void;
 }) {
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-xl font-bold text-white">Cola de Reproducción</h3>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onAddClick}
-            className="px-3 py-1.5 rounded-lg bg-slate-700/70 hover:bg-slate-700 text-white text-sm transition"
-          >
-            Añadir
-          </button>
-        </div>
+        <button
+          onClick={onAddClick}
+          className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 text-sm transition border border-purple-500/30"
+        >
+          + Añadir
+        </button>
       </div>
 
       {queue.length === 0 ? (
         <div className="text-slate-400 text-sm text-center py-8">
-          No hay canciones en la cola. ¡Añade una para empezar!
+          🎵 No hay canciones en la cola
+          <p className="mt-2 text-xs">¡Añade una para empezar!</p>
         </div>
       ) : (
         <div className="space-y-2">
           {queue.map((track, index) => (
-            <div
-              key={track.id}
-              onClick={() => onSelectTrack?.(track.id)}
-              className={`
-                p-3 rounded-lg cursor-pointer transition-all
-                ${currentTrack?.id === track.id
-                  ? 'bg-purple-500/20 border-2 border-purple-500/50 shadow-lg shadow-purple-500/20'
-                  : 'bg-slate-800/50 hover:bg-slate-700/50 border-2 border-slate-700/50 hover:border-slate-600/50'
-                }
-              `}
-            >
+              <div
+                  key={`${track.id}-${index}`}   // 👈 ANTES: key={track.id}
+                  onClick={() => onSelectTrack?.(track.id)}
+                  className={`
+      p-3 rounded-lg cursor-pointer transition-all
+      ${currentTrack?.id === track.id
+                      ? 'bg-purple-500/20 border-2 border-purple-500/50 shadow-lg shadow-purple-500/20'
+                      : 'bg-slate-800/50 hover:bg-slate-700/50 border-2 border-slate-700/50 hover:border-slate-600/50'
+                  }
+    `}
+              >
               <div className="flex items-center gap-3">
                 <span className={`text-sm font-medium w-6 ${
                   currentTrack?.id === track.id ? 'text-purple-400' : 'text-slate-400'
