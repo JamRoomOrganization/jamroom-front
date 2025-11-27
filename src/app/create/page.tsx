@@ -49,7 +49,7 @@ export default function CreateRoomPage() {
       const payload: any = {
         name: values.name.trim(),
         description: values.description.trim() || undefined,
-        visibility: values.visibility,
+        is_public: values.visibility === "public", // ← Convertir visibility a is_public
       };
 
       if (values.initialTrackId.trim()) {
