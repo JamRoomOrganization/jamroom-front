@@ -1,4 +1,3 @@
-// components/ParticipantsList.tsx (actualizado)
 "use client";
 
 import React, { useState } from "react";
@@ -10,7 +9,7 @@ type ParticipantsListProps = {
   members?: RoomMember[];
   isHost?: boolean;
   onUpdatePermissions?: (targetUserId: string, permissions: any) => Promise<void>;
-  onRemoveMember?: (targetUserId: string) => Promise<void>; // ← Nueva prop
+  onRemoveMember?: (targetUserId: string, targetName: string) =>void; 
 };
 
 function initials(name?: string) {
@@ -95,9 +94,7 @@ const ParticipantsList = React.memo(function ParticipantsList({
                     {onRemoveMember && (
                       <button
                         onClick={() => {
-                          if (confirm(`¿Eliminar a ${getDisplayName(member)} de la sala?`)) {
-                            onRemoveMember(member.user_id);
-                          }
+                            onRemoveMember(member.user_id, getDisplayName(member));
                         }}
                         className="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded border border-red-400/30 hover:border-red-400/50 transition-colors"
                         title="Eliminar miembro"

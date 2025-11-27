@@ -77,6 +77,16 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
   }, [roomId, loadMembers]);
 
   React.useEffect(() => {
+    if (!roomId) return;
+
+    const interval = setInterval(() => {
+      loadMembers();
+    }, 5000); // 5 segundos
+
+    return () => clearInterval(interval);
+  }, [roomId, loadMembers]);
+
+  React.useEffect(() => {
     loadMembers();
   }, [loadMembers]);
   

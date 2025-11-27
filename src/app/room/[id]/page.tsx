@@ -1,28 +1,52 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, {
+    useMemo,
+    useState,
+    useEffect,
+    useCallback,
+} from "react";
 import Header from "@/components/Header";
 import PlayerNow from "@/components/PlayerNow";
 import QueueList from "@/components/QueueList";
 import ChatPanel from "@/components/ChatPanel";
 import ParticipantsList from "@/components/ParticipantsList";
-import { useRoom } from "@/hooks/useRoom";              
+import { useRoom } from "@/hooks/useRoom";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, useParams } from "next/navigation";
 import InviteDialog from "@/components/InviteDialog";
 import AddSongDialog from "@/components/AddSongDialog";
 import { useRoomMembers } from "@/hooks/useRoomMembers";
-import { useRoomQueue } from "@/hooks/useRoomQueue";    
+import { useRoomQueue } from "@/hooks/useRoomQueue";
 import type { Track } from "@/types";
-import { RoomMember } from "@/hooks/useRoomMembers";
 import { useRoomActions } from "@/hooks/useRoomActions";
+import { ConfirmModal } from "@/components/ConfirmModal";
 
 export default function RoomPage() {
     const router = useRouter();
     const params = useParams<{ id: string }>();
     const roomId = params.id;
-    const [selectedMember, setSelectedMember] = useState<RoomMember | null>(null);
-    const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+
+    // Estado para modales
+    const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [removeMemberConfirm, setRemoveMemberConfirm] = useState<{
+        isOpen: boolean;
+        memberId: string;
+        memberName: string;
+    }>({
+        isOpen: false,
+        memberId: "",
+        memberName: "",
+    });
+
+    // Estado para diálogos secundarios
+    const [inviteOpen, setInviteOpen] = useState(false);
+    const [addOpen, setAddOpen] = useState(false);
+
+    // Estado de acciones de sala
+    const [isLeaving, setIsLeaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const { user, loading: authLoading } = useAuth();
 
@@ -36,73 +60,105 @@ export default function RoomPage() {
         emitPlayPause,
         emitSeek,
         playbackState,
-        currentTrackId, 
+        currentTrackId,
         hasUserInteracted,
         forcePlay,
     } = useRoom(roomId);
 
-    const [inviteOpen, setInviteOpen] = React.useState(false);
-    const [addOpen, setAddOpen] = React.useState(false);
-
-    const { members, loading: membersLoading, error: membersError, reload: reloadMembers, updateMemberPermissions } = useRoomMembers(roomId);
+    const {
+        members,
+        error: membersError,
+        reload: reloadMembers,
+        updateMemberPermissions,
+    } = useRoomMembers(roomId);
 
     const { queue, loading: queueLoading, addTrack } = useRoomQueue(roomId);
 
+    const { deleteRoom, leaveRoom, removeMember } = useRoomActions(roomId);
+
     const isHost = members.some(
-        member => member.user_id === user?.id && member.roles?.includes('host')
+        (member) => member.user_id === user?.id && member.roles?.includes("host")
     );
 
-    const { deleteRoom, leaveRoom, removeMember } = useRoomActions(roomId);
-    const [isLeaving, setIsLeaving] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
+    const currentMember = members.find((m) => m.user_id === user?.id);
+    const canAddTracks = !!currentMember?.can_add_tracks;
+    const canControlPlayback = !!currentMember?.can_control_playback;
+    const canInvite = !!currentMember?.can_invite;
 
-    const handleDeleteRoom = async () => {
-    if (!confirm("¿Estás seguro de que quieres eliminar esta sala? Esta acción no se puede deshacer.")) {
-        return;
-    }
-
-    setIsDeleting(true);
-    try {
-        await deleteRoom();
-        // La redirección se maneja en el hook
-    } catch (error) {
-        console.error("Error deleting room:", error);
-        alert("Error al eliminar la sala");
-    } finally {
-        setIsDeleting(false);
-    }
+    // Handlers de confirm modal – ABANDONAR SALA
+    const handleLeaveRoom = () => {
+        setLeaveConfirmOpen(true);
     };
 
-    const handleLeaveRoom = async () => {
-    if (!confirm("¿Estás seguro de que quieres abandonar esta sala?")) {
-        return;
-    }
-
-    setIsLeaving(true);
-    try {
-        await leaveRoom();
-        // La redirección se maneja en el hook
-    } catch (error) {
-        console.error("Error leaving room:", error);
-        alert("Error al abandonar la sala");
-    } finally {
-        setIsLeaving(false);
-    };
+    const handleLeaveConfirm = async () => {
+        setIsLeaving(true);
+        try {
+            await leaveRoom();
+            // La redirección se maneja en el hook
+        } catch (error) {
+            console.error("Error leaving room:", error);
+            alert("Error al abandonar la sala");
+        } finally {
+            setIsLeaving(false);
+            setLeaveConfirmOpen(false);
+        }
     };
 
-    const handleRemoveMember = async (targetUserId: string) => {
-    try {
-        await removeMember(targetUserId);
-        // Recargar la lista de miembros
-        await reloadMembers(); // Esta función viene de useRoomMembers
-    } catch (error) {
-        console.error("Error removing member:", error);
-        alert("Error al eliminar miembro");
-    }
+    // Handlers de confirm modal – ELIMINAR SALA
+    const handleDeleteRoom = () => {
+        setDeleteConfirmOpen(true);
+    };
+
+    const handleOpenAddDialog = () => {
+        if (!canAddTracks) {
+            alert("No tienes permiso para agregar canciones a la cola.");
+            return;
+        }
+        setAddOpen(true);
+    };
+
+
+    const handleDeleteConfirm = async () => {
+        setIsDeleting(true);
+        try {
+            await deleteRoom();
+            // La redirección se maneja en el hook
+        } catch (error) {
+            console.error("Error deleting room:", error);
+            alert("Error al eliminar la sala");
+        } finally {
+            setIsDeleting(false);
+            setDeleteConfirmOpen(false);
+        }
+    };
+
+    // Handlers de confirm modal – ELIMINAR MIEMBRO
+    const handleRemoveMemberClick = (memberId: string, memberName: string) => {
+        setRemoveMemberConfirm({
+            isOpen: true,
+            memberId,
+            memberName,
+        });
+    };
+
+    const handleRemoveMemberConfirm = async () => {
+        try {
+            await removeMember(removeMemberConfirm.memberId);
+            await reloadMembers();
+        } catch (error) {
+            console.error("Error removing member:", error);
+            alert("Error al eliminar miembro");
+        } finally {
+            setRemoveMemberConfirm({
+                isOpen: false,
+                memberId: "",
+                memberName: "",
+            });
+        }
     };
 
     // Derivar currentTrack de la cola y del currentTrackId lógico
-    const currentTrack: Track | undefined = React.useMemo(() => {
+    const currentTrack: Track | undefined = useMemo(() => {
         if (!queue || queue.length === 0) return undefined;
 
         if (currentTrackId) {
@@ -124,14 +180,14 @@ export default function RoomPage() {
     }, [queue, currentTrackId]);
 
     // Redirección si no hay usuario autenticado
-    React.useEffect(() => {
+    useEffect(() => {
         if (!authLoading && !user) {
             router.replace("/login");
         }
     }, [authLoading, user, router]);
 
     // Handler para canción anterior
-    const handlePrevious = React.useCallback(async () => {
+    const handlePrevious = useCallback(async () => {
         if (!queue || queue.length === 0) return;
 
         const currentIndex = queue.findIndex((t) => t.id === currentTrack?.id);
@@ -151,13 +207,13 @@ export default function RoomPage() {
 
         console.log("[Room] Cambiando a canción anterior:", previousTrack);
         await changeTrackFromExternalStream({
-            trackId: previousTrack.id, // ID lógico Audius
+            trackId: previousTrack.id,
             streamUrl,
         });
     }, [queue, currentTrack, changeTrackFromExternalStream]);
 
     // Handler para seleccionar canción específica desde la cola
-    const handleSelectTrack = React.useCallback(
+    const handleSelectTrack = useCallback(
         async (trackId: string) => {
             if (!queue) return;
 
@@ -171,7 +227,7 @@ export default function RoomPage() {
                 return;
             }
 
-            console.log("[Room] 🎵 Reproduciendo canción seleccionada:", selectedTrack);
+            console.log("[Room] Reproduciendo canción seleccionada:", selectedTrack);
             await changeTrackFromExternalStream({
                 trackId: selectedTrack.id,
                 streamUrl,
@@ -181,7 +237,7 @@ export default function RoomPage() {
     );
 
     // Handler para canción siguiente
-    const handleNext = React.useCallback(async () => {
+    const handleNext = useCallback(async () => {
         if (!queue || queue.length === 0) return;
 
         const currentIndex = queue.findIndex((t) => t.id === currentTrack?.id);
@@ -202,13 +258,13 @@ export default function RoomPage() {
 
         console.log("[Room] Saltando a siguiente:", nextTrack);
         await changeTrackFromExternalStream({
-            trackId: nextTrack.id, // ID lógico Audius
+            trackId: nextTrack.id,
             streamUrl,
         });
     }, [queue, currentTrack, changeTrackFromExternalStream]);
 
     // Añadir a la cola sin reproducir automáticamente
-    const handleAddAndPlay = React.useCallback(
+    const handleAddAndPlay = useCallback(
         async (
             trackId: string,
             metadata?: {
@@ -218,22 +274,25 @@ export default function RoomPage() {
                 duration?: number;
             }
         ) => {
+            if (!canAddTracks) {
+                alert("No tienes permiso para agregar canciones a la cola.");
+                return;
+            }
+
             try {
-                console.log("[Room] 📝 Agregando canción a la cola (sin reproducir)");
-
-                // Solo agregar a la cola, NO reproducir automáticamente
+                console.log("[Room] Agregando canción a la cola (sin reproducir)");
                 await addTrack(trackId, metadata);
-
-                console.log("[Room] ✅ Canción agregada a la cola exitosamente");
+                console.log("[Room] Canción agregada a la cola exitosamente");
             } catch (err) {
-                console.error("[Room] ❌ Error al agregar canción:", err);
+                console.error("[Room] Error al agregar canción:", err);
             }
         },
-        [addTrack]
+        [addTrack, canAddTracks]
     );
 
+
     // Adaptador para onChangeExternalTrack del diálogo (Audius)
-    const handleChangeExternalTrack = React.useCallback(
+    const handleChangeExternalTrack = useCallback(
         (opts: {
             trackId: string;
             streamUrl: string;
@@ -242,28 +301,13 @@ export default function RoomPage() {
             artworkUrl?: string;
             source?: "audius" | "other";
         }) => {
-            // 1) Cambiar el track en sync-service con ID lógico + streamUrl local
             changeTrackFromExternalStream({
                 trackId: opts.trackId,
                 streamUrl: opts.streamUrl,
             });
-
-            // 2) Si quisieras que además se añada a la cola:
-            // addTrack(opts.trackId, {
-            //   title: opts.title,
-            //   artist: opts.artist,
-            //   artworkUrl: opts.artworkUrl,
-            // });
         },
         [changeTrackFromExternalStream]
     );
-
-    // Memorizar handlers críticos para evitar re-renders innecesarios
-    const stableHandlers = useMemo(() => ({
-        onPrevious: handlePrevious,
-        onNext: handleNext,
-        onSelectTrack: handleSelectTrack,
-    }), [handlePrevious, handleNext, handleSelectTrack]);
 
     // A PARTIR DE AQUÍ: NINGÚN HOOK MÁS, SOLO LÓGICA Y RETURNS
 
@@ -344,8 +388,8 @@ export default function RoomPage() {
                             {is404
                                 ? "Sala no encontrada"
                                 : isAuthError
-                                    ? "Sin permisos para controlar la sala"
-                                    : "Error al cargar la sala"}
+                                ? "Sin permisos para controlar la sala"
+                                : "Error al cargar la sala"}
                         </h2>
 
                         <p
@@ -385,7 +429,9 @@ export default function RoomPage() {
                                         </button>
                                     ) : (
                                         <button
-                                            onClick={() => window.location.reload()}
+                                            onClick={() =>
+                                                window.location.reload()
+                                            }
                                             className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors"
                                         >
                                             Reintentar
@@ -399,8 +445,13 @@ export default function RoomPage() {
                                     <p>Asegúrate de que:</p>
                                     <ul className="mt-2 space-y-1 text-left max-w-md mx-auto">
                                         <li>• El backend esté corriendo</li>
-                                        <li>• El sync-service esté accesible (WebSocket)</li>
-                                        <li>• No haya problemas de red o CORS</li>
+                                        <li>
+                                            • El sync-service esté accesible
+                                            (WebSocket)
+                                        </li>
+                                        <li>
+                                            • No haya problemas de red o CORS
+                                        </li>
                                     </ul>
                                 </div>
                             )}
@@ -417,7 +468,6 @@ export default function RoomPage() {
             m.preferred_username ??
             m.nickname ??
             m.username ??
-            user?.name ??
             m.user_id,
         roles: m.roles,
         canControlPlayback: m.can_control_playback,
@@ -425,24 +475,23 @@ export default function RoomPage() {
         canInvite: m.can_invite,
     }));
 
-
     const syncLabel =
         socketStatus === "connected"
             ? "sincronizada"
             : socketStatus === "connecting"
-                ? "reconectando…"
-                : socketStatus === "authError"
-                    ? "sin permisos de control"
-                    : "sin conexión de sync";
+            ? "reconectando…"
+            : socketStatus === "authError"
+            ? "sin permisos de control"
+            : "sin conexión de sync";
 
     const syncDotClass =
         socketStatus === "connected"
             ? "bg-emerald-400"
             : socketStatus === "connecting"
-                ? "bg-yellow-400"
-                : socketStatus === "authError"
-                    ? "bg-red-400"
-                    : "bg-slate-500";
+            ? "bg-yellow-400"
+            : socketStatus === "authError"
+            ? "bg-red-400"
+            : "bg-slate-500";
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950">
@@ -470,7 +519,7 @@ export default function RoomPage() {
                                     />
                                     {syncLabel}
                                 </span>
-                                
+
                                 {!!participants.length && (
                                     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-200 border border-slate-600">
                                         <svg
@@ -497,7 +546,7 @@ export default function RoomPage() {
                             >
                                 Invitar
                             </button>
-                            
+
                             {/* Botón para abandonar sala (todos los usuarios) */}
                             <button
                                 onClick={handleLeaveRoom}
@@ -519,6 +568,43 @@ export default function RoomPage() {
                             )}
                         </div>
                     </div>
+
+                    {/* Modales de confirmación */}
+                    <ConfirmModal
+                        isOpen={leaveConfirmOpen}
+                        onClose={() => setLeaveConfirmOpen(false)}
+                        onConfirm={handleLeaveConfirm}
+                        title="Abandonar sala"
+                        message="¿Estás seguro de que quieres abandonar esta sala?"
+                        confirmText="Abandonar"
+                        type="warning"
+                    />
+
+                    <ConfirmModal
+                        isOpen={deleteConfirmOpen}
+                        onClose={() => setDeleteConfirmOpen(false)}
+                        onConfirm={handleDeleteConfirm}
+                        title="Eliminar sala"
+                        message="¿Estás seguro de que quieres eliminar esta sala? Esta acción no se puede deshacer y todos los participantes serán expulsados."
+                        confirmText="Eliminar"
+                        type="danger"
+                    />
+
+                    <ConfirmModal
+                        isOpen={removeMemberConfirm.isOpen}
+                        onClose={() =>
+                            setRemoveMemberConfirm({
+                                isOpen: false,
+                                memberId: "",
+                                memberName: "",
+                            })
+                        }
+                        onConfirm={handleRemoveMemberConfirm}
+                        title="Eliminar miembro"
+                        message={`¿Estás seguro de que quieres eliminar a "${removeMemberConfirm.memberName}" de la sala?`}
+                        confirmText="Eliminar"
+                        type="danger"
+                    />
 
                     {membersError && (
                         <p className="mt-2 text-xs text-red-400">
@@ -545,17 +631,17 @@ export default function RoomPage() {
                         <QueueList
                             queue={queue}
                             currentTrack={currentTrack}
-                            onAddClick={() => setAddOpen(true)}
+                            onAddClick={handleOpenAddDialog}
                             onSelectTrack={handleSelectTrack}
                         />
                     </div>
 
                     <aside className="space-y-6">
-                        <ParticipantsList   
+                        <ParticipantsList
                             members={members}
                             isHost={isHost}
                             onUpdatePermissions={updateMemberPermissions}
-                            onRemoveMember={handleRemoveMember}
+                            onRemoveMember={handleRemoveMemberClick}
                         />
                         <ChatPanel />
                     </aside>
@@ -577,3 +663,4 @@ export default function RoomPage() {
         </div>
     );
 }
+
