@@ -81,9 +81,8 @@ export default function RoomPage() {
         (member) => member.user_id === user?.id && member.roles?.includes("host")
     );
 
-    // Miembro actual y permisos
     const currentMember = members.find((m) => m.user_id === user?.id);
-    const canAddTracks = !!currentMember?.can_add_tracks;
+    const canAddTracks = isHost || !!currentMember?.can_add_tracks;
     const canControlPlayback = !!currentMember?.can_control_playback;
     const canInvite = !!currentMember?.can_invite;
 
