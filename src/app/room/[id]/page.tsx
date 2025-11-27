@@ -1,24 +1,27 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import Header from "@/components/Header";
 import PlayerNow from "@/components/PlayerNow";
 import QueueList from "@/components/QueueList";
 import ChatPanel from "@/components/ChatPanel";
 import ParticipantsList from "@/components/ParticipantsList";
-import { useRoom } from "@/hooks/useRoom";              // 👈 IMPORT NOMBRADO
+import { useRoom } from "@/hooks/useRoom";              
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, useParams } from "next/navigation";
 import InviteDialog from "@/components/InviteDialog";
 import AddSongDialog from "@/components/AddSongDialog";
 import { useRoomMembers } from "@/hooks/useRoomMembers";
-import { useRoomQueue } from "@/hooks/useRoomQueue";     // 👈 Hook separado
+import { useRoomQueue } from "@/hooks/useRoomQueue";    
 import type { Track } from "@/types";
+import { RoomMember } from "@/hooks/useRoomMembers";
 
 export default function RoomPage() {
     const router = useRouter();
     const params = useParams<{ id: string }>();
     const roomId = params.id;
+    const [selectedMember, setSelectedMember] = useState<RoomMember | null>(null);
+    const [showPermissionsModal, setShowPermissionsModal] = useState(false);
 
     const { user, loading: authLoading } = useAuth();
 
@@ -32,7 +35,7 @@ export default function RoomPage() {
         emitPlayPause,
         emitSeek,
         playbackState,
-        currentTrackId, // 👈 ID lógico Audius
+        currentTrackId, 
         hasUserInteracted,
         forcePlay,
     } = useRoom(roomId);
@@ -40,9 +43,13 @@ export default function RoomPage() {
     const [inviteOpen, setInviteOpen] = React.useState(false);
     const [addOpen, setAddOpen] = React.useState(false);
 
-    const { members, error: membersError } = useRoomMembers(roomId);
+    const { members, loading: membersLoading, error: membersError, updateMemberPermissions } = useRoomMembers(roomId);
 
     const { queue, loading: queueLoading, addTrack } = useRoomQueue(roomId);
+
+    const isHost = members.some(
+        member => member.user_id === user?.id && member.roles?.includes('host')
+    );
 
     // Derivar currentTrack de la cola y del currentTrackId lógico
     const currentTrack: Track | undefined = React.useMemo(() => {
@@ -473,7 +480,11 @@ export default function RoomPage() {
                     </div>
 
                     <aside className="space-y-6">
-                        <ParticipantsList participants={participants} />
+                        <ParticipantsList   
+                            members={members}
+                            isHost={isHost}
+                            onUpdatePermissions={updateMemberPermissions}
+                        />
                         <ChatPanel />
                     </aside>
                 </div>

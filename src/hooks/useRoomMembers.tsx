@@ -22,6 +22,7 @@ type UseRoomMembersResult = {
   loading: boolean;
   error: string | null;
   reload: () => Promise<void>;
+  updateMemberPermissions: (targetUserId: string, permissions: any) => Promise<void>;
 };
 
 export function useRoomMembers(roomId?: string): UseRoomMembersResult {
@@ -58,6 +59,23 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
     }
   }, [roomId]);
 
+  // Función para actualizar permisos
+  const updateMemberPermissions = React.useCallback(async (targetUserId: string, permissions: any) => {
+    if (!roomId) return;
+    
+    try {
+      await api.patch(
+        `/api/rooms/${roomId}/members/${targetUserId}/permissions`,
+        permissions,
+        true
+      );
+      await loadMembers();
+    } catch (error) {
+      console.error("[useRoomMembers] Error updating permissions:", error);
+      throw error;
+    }
+  }, [roomId, loadMembers]);
+
   React.useEffect(() => {
     loadMembers();
   }, [loadMembers]);
@@ -66,7 +84,13 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
     console.log("[useRoomMembers] members state updated:", members);
   }, [members]);
 
-  return { members, loading, error, reload: loadMembers };
+  return { 
+    members, 
+    loading, 
+    error, 
+    reload: loadMembers, 
+    updateMemberPermissions 
+  };
 }
 
 
