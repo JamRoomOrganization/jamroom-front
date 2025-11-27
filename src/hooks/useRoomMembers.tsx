@@ -21,21 +21,25 @@ type UseRoomMembersResult = {
   members: RoomMember[];
   loading: boolean;
   error: string | null;
-  isMember: boolean; 
   reload: () => Promise<void>;
   updateMemberPermissions: (
     targetUserId: string,
     permissions: any
   ) => Promise<void>;
+  /**
+   * null  -> aún no sabemos
+   * true  -> es miembro
+   * false -> backend dice que ya no es miembro (403)
+   */
+  isMember: boolean | null;
 };
 
 export function useRoomMembers(roomId?: string): UseRoomMembersResult {
   const [members, setMembers] = React.useState<RoomMember[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [isMember, setIsMember] = React.useState(true);
+  const [isMember, setIsMember] = React.useState<boolean | null>(null);
 
-  // Carga de miembros (SOLO GET, sin ensure)
   const loadMembers = React.useCallback(async () => {
     if (!roomId) return;
     setLoading(true);
@@ -47,34 +51,43 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
         true
       );
 
+      console.log("[useRoomMembers] /members response:", result);
+      console.log(
+        "[useRoomMembers] /members first member:",
+        result.data?.[0]
+      );
+
       setMembers(result.data ?? []);
-      setIsMember(true); // si pasa requireRoomMember, sigue siendo miembro
+      setIsMember(true);
     } catch (err: any) {
       console.error("[useRoomMembers] error", err);
 
-      // Intentamos extraer status HTTP si el wrapper lo trae
-      const status =
-        err?.response?.status ??
-        err?.status ??
-        err?.code ??
-        undefined;
+      const msg: string =
+        err?.message ||
+        err?.data?.message ||
+        "Error cargando participantes.";
 
-      // Si el backend responde 403/404 en /members, el usuario ya no es miembro
-      if (status === 403 || status === 404) {
-        console.warn("[useRoomMembers] usuario ya no es miembro de la sala");
+      setError(msg);
+
+      const lower = msg.toLowerCase();
+
+      // Si el backend dice explícitamente que no es miembro -> marcar isMember = false
+      if (
+        err?.status === 403 ||
+        lower.includes("not a member of this room") ||
+        lower.includes("not a member")
+      ) {
         setIsMember(false);
+        // Opcionalmente vaciamos la lista
         setMembers([]);
-        // No mostramos mensaje rojo de error aquí; la lógica de expulsión se maneja en RoomPage
-        setError(null);
-      } else {
-        setError(err?.message || "Error cargando participantes.");
       }
     } finally {
       setLoading(false);
     }
   }, [roomId]);
 
-  // Asegurar membresía SOLO una vez cuando el usuario entra a la sala
+  // Asegurar membresía SOLO una vez al entrar en la sala.
+  // Si el usuario entra por primera vez, esto lo "registra" en room_members.
   React.useEffect(() => {
     if (!roomId) return;
 
@@ -87,63 +100,69 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
         );
       } catch (err) {
         console.error("[useRoomMembers] error en ensureMembership", err);
-        // Si esto falla, igualmente loadMembers indicará si es miembro o no
+        // Si aquí hubiera 403 (no debería), no tocamos isMember;
+        // el backend sólo debería negar si no está autenticado.
       }
     };
 
     ensureMembership();
   }, [roomId]);
 
-  // Carga inicial de miembros
+  // Primera carga explícita
   React.useEffect(() => {
     if (!roomId) return;
     loadMembers();
   }, [roomId, loadMembers]);
 
-  // Polling cada 5 segundos SOLO de /members
+  // Polling periódico mientras siga siendo miembro
   React.useEffect(() => {
     if (!roomId) return;
+    if (isMember === false) {
+      // Si ya sabemos que NO es miembro, dejamos de hacer polling
+      return;
+    }
 
     const interval = setInterval(() => {
       loadMembers();
-    }, 5000);
+    }, 5000); // 5 segundos
 
     return () => clearInterval(interval);
-  }, [roomId, loadMembers]);
+  }, [roomId, loadMembers, isMember]);
 
   React.useEffect(() => {
     console.log("[useRoomMembers] members state updated:", members);
   }, [members]);
 
-  // Actualizar permisos y recargar lista
-  const updateMemberPermissions = React.useCallback(
-    async (targetUserId: string, permissions: any) => {
-      if (!roomId) return;
-
-      try {
-        await api.patch(
-          `/api/rooms/${roomId}/members/${targetUserId}/permissions`,
-          permissions,
-          true
-        );
-        await loadMembers();
-      } catch (error) {
-        console.error("[useRoomMembers] Error updating permissions:", error);
-        throw error;
-      }
-    },
-    [roomId, loadMembers]
-  );
-
   return {
     members,
     loading,
     error,
-    isMember,
     reload: loadMembers,
-    updateMemberPermissions,
+    updateMemberPermissions: React.useCallback(
+      async (targetUserId: string, permissions: any) => {
+        if (!roomId) return;
+
+        try {
+          await api.patch(
+            `/api/rooms/${roomId}/members/${targetUserId}/permissions`,
+            permissions,
+            true
+          );
+          await loadMembers();
+        } catch (error) {
+          console.error(
+            "[useRoomMembers] Error updating permissions:",
+            error
+          );
+          throw error;
+        }
+      },
+      [roomId, loadMembers]
+    ),
+    isMember,
   };
 }
+
 
 
 

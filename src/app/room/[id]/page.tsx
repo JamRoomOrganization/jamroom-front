@@ -1,10 +1,10 @@
 "use client";
 
 import React, {
-    useMemo,
-    useState,
-    useEffect,
-    useCallback,
+  useMemo,
+  useState,
+  useEffect,
+  useCallback,
 } from "react";
 import Header from "@/components/Header";
 import PlayerNow from "@/components/PlayerNow";
@@ -23,655 +23,670 @@ import { useRoomActions } from "@/hooks/useRoomActions";
 import { ConfirmModal } from "@/components/ConfirmModal";
 
 export default function RoomPage() {
-    const router = useRouter();
-    const params = useParams<{ id: string }>();
-    const roomId = params.id;
+  const router = useRouter();
+  const params = useParams<{ id: string }>();
+  const roomId = params.id;
 
-    // Estado para modales
-    const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
-    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-    const [removeMemberConfirm, setRemoveMemberConfirm] = useState<{
-        isOpen: boolean;
-        memberId: string;
-        memberName: string;
-    }>({
+  // Estado para modales
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [removeMemberConfirm, setRemoveMemberConfirm] = useState<{
+    isOpen: boolean;
+    memberId: string;
+    memberName: string;
+  }>({
+    isOpen: false,
+    memberId: "",
+    memberName: "",
+  });
+
+  // Estado para diálogos secundarios
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+
+  // Estado de acciones de sala
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const { user, loading: authLoading } = useAuth();
+
+  const {
+    room,
+    loading: roomLoading,
+    error,
+    socketStatus,
+    changeTrackFromExternalStream,
+    audioRef,
+    emitPlayPause,
+    emitSeek,
+    playbackState,
+    currentTrackId,
+    hasUserInteracted,
+    forcePlay,
+  } = useRoom(roomId);
+
+  const {
+    members,
+    error: membersError,
+    reload: reloadMembers,
+    isMember,
+    updateMemberPermissions,
+  } = useRoomMembers(roomId);
+
+  const { queue, loading: queueLoading, addTrack } = useRoomQueue(roomId);
+
+  const { deleteRoom, leaveRoom, removeMember } = useRoomActions(roomId);
+
+  const isHost = members.some(
+    (member) =>
+      member.user_id === user?.id && member.roles?.includes("host")
+  );
+
+  const currentMember = members.find((m) => m.user_id === user?.id);
+
+  // Host siempre puede agregar; si no es host, respeta can_add_tracks
+  const canAddTracks =
+    isHost || !!currentMember?.can_add_tracks;
+  const canControlPlayback =
+    !!currentMember?.can_control_playback || isHost;
+  const canInvite = !!currentMember?.can_invite || isHost;
+
+  // Handlers de confirm modal – ABANDONAR SALA
+  const handleLeaveRoom = () => {
+    setLeaveConfirmOpen(true);
+  };
+
+  const handleLeaveConfirm = async () => {
+    setIsLeaving(true);
+    try {
+      await leaveRoom();
+      // La redirección se maneja en el hook
+    } catch (error) {
+      console.error("Error leaving room:", error);
+      alert("Error al abandonar la sala");
+    } finally {
+      setIsLeaving(false);
+      setLeaveConfirmOpen(false);
+    }
+  };
+
+  // Handlers de confirm modal – ELIMINAR SALA
+  const handleDeleteRoom = () => {
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteRoom();
+      // La redirección se maneja en el hook
+    } catch (error) {
+      console.error("Error deleting room:", error);
+      alert("Error al eliminar la sala");
+    } finally {
+      setIsDeleting(false);
+      setDeleteConfirmOpen(false);
+    }
+  };
+
+  const handleOpenAddDialog = () => {
+    if (!canAddTracks) {
+      alert("No tienes permiso para agregar canciones a la cola.");
+      return;
+    }
+    setAddOpen(true);
+  };
+
+  // Handlers de confirm modal – ELIMINAR MIEMBRO
+  const handleRemoveMemberClick = (
+    memberId: string,
+    memberName: string
+  ) => {
+    setRemoveMemberConfirm({
+      isOpen: true,
+      memberId,
+      memberName,
+    });
+  };
+
+  const handleRemoveMemberConfirm = async () => {
+    try {
+      await removeMember(removeMemberConfirm.memberId);
+      await reloadMembers();
+    } catch (error) {
+      console.error("Error removing member:", error);
+      alert("Error al eliminar miembro");
+    } finally {
+      setRemoveMemberConfirm({
         isOpen: false,
         memberId: "",
         memberName: "",
-    });
+      });
+    }
+  };
 
-    // Estado para diálogos secundarios
-    const [inviteOpen, setInviteOpen] = useState(false);
-    const [addOpen, setAddOpen] = useState(false);
+  // Derivar currentTrack de la cola y del currentTrackId lógico
+  const currentTrack: Track | undefined = useMemo(() => {
+    if (!queue || queue.length === 0) return undefined;
 
-    // Estado de acciones de sala
-    const [isLeaving, setIsLeaving] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false);
+    if (currentTrackId) {
+      const match = queue.find((t) => t.id === currentTrackId);
+      if (match) {
+        console.log(
+          "[Room] currentTrack encontrado por currentTrackId:",
+          match
+        );
+        return match;
+      }
+    }
 
-    const { user, loading: authLoading } = useAuth();
+    console.log(
+      "[Room] currentTrack usando primer elemento de la cola:",
+      queue[0]
+    );
+    return queue[0];
+  }, [queue, currentTrackId]);
 
-    const {
-        room,
-        loading: roomLoading,
-        error,
-        socketStatus,
-        changeTrackFromExternalStream,
-        audioRef,
-        emitPlayPause,
-        emitSeek,
-        playbackState,
-        currentTrackId,
-        hasUserInteracted,
-        forcePlay,
-    } = useRoom(roomId);
+  // Redirección si no hay usuario autenticado
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace("/login");
+    }
+  }, [authLoading, user, router]);
 
-    const {
-        members,
-        error: membersError,
-        isMember,
-        reload: reloadMembers,
-        updateMemberPermissions,
-    } = useRoomMembers(roomId);
+  // Si el backend indica que ya no es miembro, expulsar al usuario de la sala
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) return;
 
-    const { queue, loading: queueLoading, addTrack } = useRoomQueue(roomId);
+    if (isMember === false) {
+      alert("Has sido eliminado de la sala por el host.");
+      router.replace("/");
+    }
+  }, [authLoading, user, isMember, router]);
 
-    const { deleteRoom, leaveRoom, removeMember } = useRoomActions(roomId);
+  // Handler para canción anterior
+  const handlePrevious = useCallback(async () => {
+    if (!queue || queue.length === 0) return;
 
-    const isHost = members.some(
-        (member) => member.user_id === user?.id && member.roles?.includes("host")
+    const currentIndex = queue.findIndex(
+      (t) => t.id === currentTrack?.id
     );
 
-    const currentMember = members.find((m) => m.user_id === user?.id);
-    const canAddTracks = isHost || !!currentMember?.can_add_tracks;
-    const canControlPlayback = !!currentMember?.can_control_playback;
-    const canInvite = !!currentMember?.can_invite;
+    if (currentIndex <= 0) {
+      console.log("[Room] Ya estás en la primera canción");
+      return;
+    }
 
-    // Handlers de confirm modal – ABANDONAR SALA
-    const handleLeaveRoom = () => {
-        setLeaveConfirmOpen(true);
-    };
+    const previousTrack = queue[currentIndex - 1];
+    const streamUrl = (previousTrack as any).streamUrl;
 
-    const handleLeaveConfirm = async () => {
-        setIsLeaving(true);
-        try {
-            await leaveRoom();
-            // La redirección se maneja en el hook
-        } catch (error) {
-            console.error("Error leaving room:", error);
-            alert("Error al abandonar la sala");
-        } finally {
-            setIsLeaving(false);
-            setLeaveConfirmOpen(false);
-        }
-    };
+    if (!streamUrl) {
+      console.warn("[Room] previousTrack sin streamUrl válido");
+      return;
+    }
 
-    // Handlers de confirm modal – ELIMINAR SALA
-    const handleDeleteRoom = () => {
-        setDeleteConfirmOpen(true);
-    };
+    console.log("[Room] Cambiando a canción anterior:", previousTrack);
+    await changeTrackFromExternalStream({
+      trackId: previousTrack.id,
+      streamUrl,
+    });
+  }, [queue, currentTrack, changeTrackFromExternalStream]);
 
-    const handleDeleteConfirm = async () => {
-        setIsDeleting(true);
-        try {
-            await deleteRoom();
-            // La redirección se maneja en el hook
-        } catch (error) {
-            console.error("Error deleting room:", error);
-            alert("Error al eliminar la sala");
-        } finally {
-            setIsDeleting(false);
-            setDeleteConfirmOpen(false);
-        }
-    };
+  // Handler para seleccionar canción específica desde la cola
+  const handleSelectTrack = useCallback(
+    async (trackId: string) => {
+      if (!queue) return;
 
-    // Handler para abrir diálogo de agregar canción respetando permisos
-    const handleOpenAddDialog = () => {
-        if (!canAddTracks) {
-            alert("No tienes permiso para agregar canciones a la cola.");
-            return;
-        }
-        setAddOpen(true);
-    };
+      const selectedTrack = queue.find((t) => t.id === trackId);
+      if (!selectedTrack) return;
 
-    // Handlers de confirm modal – ELIMINAR MIEMBRO
-    const handleRemoveMemberClick = (memberId: string, memberName: string) => {
-        setRemoveMemberConfirm({
-            isOpen: true,
-            memberId,
-            memberName,
-        });
-    };
+      const streamUrl = (selectedTrack as any).streamUrl;
 
-    const handleRemoveMemberConfirm = async () => {
-        try {
-            await removeMember(removeMemberConfirm.memberId);
-            await reloadMembers();
-        } catch (error) {
-            console.error("Error removing member:", error);
-            alert("Error al eliminar miembro");
-        } finally {
-            setRemoveMemberConfirm({
+      if (!streamUrl) {
+        console.warn("[Room] selectedTrack sin streamUrl válido");
+        return;
+      }
+
+      console.log(
+        "[Room] Reproduciendo canción seleccionada:",
+        selectedTrack
+      );
+      await changeTrackFromExternalStream({
+        trackId: selectedTrack.id,
+        streamUrl,
+      });
+    },
+    [queue, changeTrackFromExternalStream]
+  );
+
+  // Handler para canción siguiente
+  const handleNext = useCallback(async () => {
+    if (!queue || queue.length === 0) return;
+
+    const currentIndex = queue.findIndex(
+      (t) => t.id === currentTrack?.id
+    );
+    const nextIndex = currentIndex >= 0 ? currentIndex + 1 : 0;
+
+    if (nextIndex >= queue.length) {
+      console.log("[Room] Ya estás en la última canción");
+      return;
+    }
+
+    const nextTrack = queue[nextIndex];
+    const streamUrl = (nextTrack as any).streamUrl;
+
+    if (!streamUrl) {
+      console.warn("[Room] nextTrack sin streamUrl válido");
+      return;
+    }
+
+    console.log("[Room] Saltando a siguiente:", nextTrack);
+    await changeTrackFromExternalStream({
+      trackId: nextTrack.id,
+      streamUrl,
+    });
+  }, [queue, currentTrack, changeTrackFromExternalStream]);
+
+  // Añadir a la cola sin reproducir automáticamente
+  const handleAddAndPlay = useCallback(
+    async (
+      trackId: string,
+      metadata?: {
+        title?: string;
+        artist?: string;
+        artworkUrl?: string;
+        duration?: number;
+      }
+    ) => {
+      if (!canAddTracks) {
+        alert("No tienes permiso para agregar canciones a la cola.");
+        return;
+      }
+
+      try {
+        console.log(
+          "[Room] Agregando canción a la cola (sin reproducir)"
+        );
+        await addTrack(trackId, metadata);
+        console.log(
+          "[Room] Canción agregada a la cola exitosamente"
+        );
+      } catch (err) {
+        console.error("[Room] Error al agregar canción:", err);
+      }
+    },
+    [addTrack, canAddTracks]
+  );
+
+  // Adaptador para onChangeExternalTrack del diálogo (Audius)
+  const handleChangeExternalTrack = useCallback(
+    (opts: {
+      trackId: string;
+      streamUrl: string;
+      title: string;
+      artist?: string;
+      artworkUrl?: string;
+      source?: "audius" | "other";
+    }) => {
+      changeTrackFromExternalStream({
+        trackId: opts.trackId,
+        streamUrl: opts.streamUrl,
+      });
+    },
+    [changeTrackFromExternalStream]
+  );
+
+  // A PARTIR DE AQUÍ: NINGÚN HOOK MÁS, SOLO LÓGICA Y RETURNS
+
+  if (!user && !authLoading) {
+    return null;
+  }
+
+  const isLoading = roomLoading || authLoading || queueLoading;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-white text-lg">Cargando sala…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar error si no se pudo cargar la sala
+  if (error) {
+    const is404 =
+      error.includes("404") ||
+      error.toLowerCase().includes("not found") ||
+      error.toLowerCase().includes("no existe");
+
+    const isAuthError = socketStatus === "authError";
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950">
+        <Header />
+        <div className="max-w-2xl mx-auto px-4 py-16">
+          <div
+            className={`border rounded-2xl p-8 text-center ${
+              is404
+                ? "bg-yellow-900/20 border-yellow-500/50"
+                : "bg-red-900/20 border-red-500/50"
+            }`}
+          >
+            <div
+              className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
+                is404 ? "bg-yellow-500/20" : "bg-red-500/20"
+              }`}
+            >
+              {is404 ? (
+                <svg
+                  className="w-8 h-8 text-yellow-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  className="w-8 h-8 text-red-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              )}
+            </div>
+
+            <h2 className="text-2xl font-bold text-white mb-3">
+              {is404
+                ? "Sala no encontrada"
+                : isAuthError
+                ? "Sin permisos para controlar la sala"
+                : "Error al cargar la sala"}
+            </h2>
+
+            <p
+              className={`mb-6 ${
+                is404 ? "text-yellow-200" : "text-red-200"
+              }`}
+            >
+              {is404
+                ? `La sala "${roomId}" no existe en el sistema.`
+                : error}
+            </p>
+
+            <div className="space-y-3">
+              {is404 ? (
+                <>
+                  <button
+                    onClick={() => router.push("/create")}
+                    className="px-6 py-3 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-xl font-medium transition-all"
+                  >
+                    Crear una sala nueva
+                  </button>
+                  <button
+                    onClick={() => router.push("/")}
+                    className="block w-full px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition-colors"
+                  >
+                    Ver salas disponibles
+                  </button>
+                </>
+              ) : (
+                <>
+                  {isAuthError ? (
+                    <button
+                      onClick={() => router.push("/login")}
+                      className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-xl font-medium transition-colors"
+                    >
+                      Volver a iniciar sesión
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors"
+                    >
+                      Reintentar
+                    </button>
+                  )}
+                </>
+              )}
+
+              {!is404 && !isAuthError && (
+                <div className="text-slate-400 text-sm">
+                  <p>Asegúrate de que:</p>
+                  <ul className="mt-2 space-y-1 text-left max-w-md mx-auto">
+                    <li>• El backend esté corriendo</li>
+                    <li>
+                      • El sync-service esté accesible (WebSocket)
+                    </li>
+                    <li>• No haya problemas de red o CORS</li>
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const participants = members.map((m) => ({
+    id: m.user_id,
+    name:
+      m.preferred_username ??
+      m.nickname ??
+      m.username ??
+      m.user_id,
+    roles: m.roles,
+    canControlPlayback: m.can_control_playback,
+    canAddTracks: m.can_add_tracks,
+    canInvite: m.can_invite,
+  }));
+
+  const syncLabel =
+    socketStatus === "connected"
+      ? "sincronizada"
+      : socketStatus === "connecting"
+      ? "reconectando…"
+      : socketStatus === "authError"
+      ? "sin permisos de control"
+      : "sin conexión de sync";
+
+  const syncDotClass =
+    socketStatus === "connected"
+      ? "bg-emerald-400"
+      : socketStatus === "connecting"
+      ? "bg-yellow-400"
+      : socketStatus === "authError"
+      ? "bg-red-400"
+      : "bg-slate-500";
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950">
+      <Header />
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="text-3xl md:text-4xl font-bold text-white truncate">
+                {room?.name ?? "Sala"}
+              </h1>
+              <div className="mt-1 flex items-center gap-3 text-sm text-slate-400">
+                <span>Sala de colaboración musical</span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-900/60 text-slate-100 border border-slate-700/80">
+                  <span
+                    className={[
+                      "w-2 h-2 rounded-full",
+                      syncDotClass,
+                      socketStatus === "connected" ||
+                      socketStatus === "connecting"
+                        ? "animate-pulse"
+                        : "",
+                    ].join(" ")}
+                  />
+                  {syncLabel}
+                </span>
+
+                {!!participants.length && (
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-200 border border-slate-600">
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      className="opacity-80"
+                    >
+                      <path
+                        fill="currentColor"
+                        d="M12 12a5 5 0 1 0-5-5a5 5 0 0 0 5 5m-7 8a7 7 0 0 1 14 0z"
+                      />
+                    </svg>
+                    {participants.length}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setInviteOpen(true)}
+                className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-4 md:px-6 py-2.5 rounded-full font-medium transition-all duration-200 hover:scale-[1.02]"
+              >
+                Invitar
+              </button>
+
+              {/* Botón para abandonar sala (todos los usuarios) */}
+              <button
+                onClick={handleLeaveRoom}
+                disabled={isLeaving}
+                className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white px-4 md:px-6 py-2.5 rounded-full font-medium transition-all duration-200 hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
+              >
+                {isLeaving ? "Saliendo..." : "Abandonar"}
+              </button>
+
+              {/* Botón para eliminar sala (solo host) */}
+              {isHost && (
+                <button
+                  onClick={handleDeleteRoom}
+                  disabled={isDeleting}
+                  className="bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white px-4 md:px-6 py-2.5 rounded-full font-medium transition-all duration-200 hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
+                >
+                  {isDeleting ? "Eliminando..." : "Eliminar"}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Modales de confirmación */}
+          <ConfirmModal
+            isOpen={leaveConfirmOpen}
+            onClose={() => setLeaveConfirmOpen(false)}
+            onConfirm={handleLeaveConfirm}
+            title="Abandonar sala"
+            message="¿Estás seguro de que quieres abandonar esta sala?"
+            confirmText="Abandonar"
+            type="warning"
+          />
+
+          <ConfirmModal
+            isOpen={deleteConfirmOpen}
+            onClose={() => setDeleteConfirmOpen(false)}
+            onConfirm={handleDeleteConfirm}
+            title="Eliminar sala"
+            message="¿Estás seguro de que quieres eliminar esta sala? Esta acción no se puede deshacer y todos los participantes serán expulsados."
+            confirmText="Eliminar"
+            type="danger"
+          />
+
+          <ConfirmModal
+            isOpen={removeMemberConfirm.isOpen}
+            onClose={() =>
+              setRemoveMemberConfirm({
                 isOpen: false,
                 memberId: "",
                 memberName: "",
-            });
-        }
-    };
-
-    // Derivar currentTrack de la cola y del currentTrackId lógico
-    const currentTrack: Track | undefined = useMemo(() => {
-        if (!queue || queue.length === 0) return undefined;
-
-        if (currentTrackId) {
-            const match = queue.find((t) => t.id === currentTrackId);
-            if (match) {
-                console.log(
-                    "[Room] currentTrack encontrado por currentTrackId:",
-                    match
-                );
-                return match;
+              })
             }
-        }
+            onConfirm={handleRemoveMemberConfirm}
+            title="Eliminar miembro"
+            message={`¿Estás seguro de que quieres eliminar a "${removeMemberConfirm.memberName}" de la sala?`}
+            confirmText="Eliminar"
+            type="danger"
+          />
 
-        console.log(
-            "[Room] currentTrack usando primer elemento de la cola:",
-            queue[0]
-        );
-        return queue[0];
-    }, [queue, currentTrackId]);
-
-    // Redirección si no hay usuario autenticado
-    useEffect(() => {
-        if (!authLoading && !user) {
-            router.replace("/login");
-        }
-    }, [authLoading, user, router]);
-
-    // Expulsar al usuario si deja de ser miembro de la sala
-    useEffect(() => {
-        if (authLoading || !user) return;
-
-        if (!isMember) {
-            alert("Has sido eliminado de la sala por el host.");
-            router.replace("/");
-        }
-    }, [authLoading, user, isMember, router]);
-
-    // Handler para canción anterior
-    const handlePrevious = useCallback(async () => {
-        if (!queue || queue.length === 0) return;
-
-        const currentIndex = queue.findIndex((t) => t.id === currentTrack?.id);
-
-        if (currentIndex <= 0) {
-            console.log("[Room] Ya estás en la primera canción");
-            return;
-        }
-
-        const previousTrack = queue[currentIndex - 1];
-        const streamUrl = previousTrack.streamUrl;
-
-        if (!streamUrl) {
-            console.warn("[Room] previousTrack sin streamUrl válido");
-            return;
-        }
-
-        console.log("[Room] Cambiando a canción anterior:", previousTrack);
-        await changeTrackFromExternalStream({
-            trackId: previousTrack.id,
-            streamUrl,
-        });
-    }, [queue, currentTrack, changeTrackFromExternalStream]);
-
-    // Handler para seleccionar canción específica desde la cola
-    const handleSelectTrack = useCallback(
-        async (trackId: string) => {
-            if (!queue) return;
-
-            const selectedTrack = queue.find((t) => t.id === trackId);
-            if (!selectedTrack) return;
-
-            const streamUrl = selectedTrack.streamUrl;
-
-            if (!streamUrl) {
-                console.warn("[Room] selectedTrack sin streamUrl válido");
-                return;
-            }
-
-            console.log("[Room] Reproduciendo canción seleccionada:", selectedTrack);
-            await changeTrackFromExternalStream({
-                trackId: selectedTrack.id,
-                streamUrl,
-            });
-        },
-        [queue, changeTrackFromExternalStream]
-    );
-
-    // Handler para canción siguiente
-    const handleNext = useCallback(async () => {
-        if (!queue || queue.length === 0) return;
-
-        const currentIndex = queue.findIndex((t) => t.id === currentTrack?.id);
-        const nextIndex = currentIndex >= 0 ? currentIndex + 1 : 0;
-
-        if (nextIndex >= queue.length) {
-            console.log("[Room] Ya estás en la última canción");
-            return;
-        }
-
-        const nextTrack = queue[nextIndex];
-        const streamUrl = nextTrack.streamUrl;
-
-        if (!streamUrl) {
-            console.warn("[Room] nextTrack sin streamUrl válido");
-            return;
-        }
-
-        console.log("[Room] Saltando a siguiente:", nextTrack);
-        await changeTrackFromExternalStream({
-            trackId: nextTrack.id,
-            streamUrl,
-        });
-    }, [queue, currentTrack, changeTrackFromExternalStream]);
-
-    // Añadir a la cola sin reproducir automáticamente (respetando permisos)
-    const handleAddAndPlay = useCallback(
-        async (
-            trackId: string,
-            metadata?: {
-                title?: string;
-                artist?: string;
-                artworkUrl?: string;
-                duration?: number;
-            }
-        ) => {
-            if (!canAddTracks) {
-                alert("No tienes permiso para agregar canciones a la cola.");
-                return;
-            }
-
-            try {
-                console.log("[Room] Agregando canción a la cola (sin reproducir)");
-                await addTrack(trackId, metadata);
-                console.log("[Room] Canción agregada a la cola exitosamente");
-            } catch (err) {
-                console.error("[Room] Error al agregar canción:", err);
-            }
-        },
-        [addTrack, canAddTracks]
-    );
-
-    // Adaptador para onChangeExternalTrack del diálogo (Audius)
-    const handleChangeExternalTrack = useCallback(
-        (opts: {
-            trackId: string;
-            streamUrl: string;
-            title: string;
-            artist?: string;
-            artworkUrl?: string;
-            source?: "audius" | "other";
-        }) => {
-            changeTrackFromExternalStream({
-                trackId: opts.trackId,
-                streamUrl: opts.streamUrl,
-            });
-        },
-        [changeTrackFromExternalStream]
-    );
-
-    // A PARTIR DE AQUÍ: NINGÚN HOOK MÁS, SOLO LÓGICA Y RETURNS
-
-    if (!user && !authLoading) {
-        return null;
-    }
-
-    const isLoading = roomLoading || authLoading || queueLoading;
-
-    if (isLoading) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-white text-lg">Cargando sala…</p>
-                </div>
-            </div>
-        );
-    }
-
-    // Mostrar error si no se pudo cargar la sala
-    if (error) {
-        const is404 =
-            error.includes("404") ||
-            error.toLowerCase().includes("not found") ||
-            error.toLowerCase().includes("no existe");
-
-        const isAuthError = socketStatus === "authError";
-
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950">
-                <Header />
-                <div className="max-w-2xl mx-auto px-4 py-16">
-                    <div
-                        className={`border rounded-2xl p-8 text-center ${
-                            is404
-                                ? "bg-yellow-900/20 border-yellow-500/50"
-                                : "bg-red-900/20 border-red-500/50"
-                        }`}
-                    >
-                        <div
-                            className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${
-                                is404 ? "bg-yellow-500/20" : "bg-red-500/20"
-                            }`}
-                        >
-                            {is404 ? (
-                                <svg
-                                    className="w-8 h-8 text-yellow-400"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                    />
-                                </svg>
-                            ) : (
-                                <svg
-                                    className="w-8 h-8 text-red-400"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                                    />
-                                </svg>
-                            )}
-                        </div>
-
-                        <h2 className="text-2xl font-bold text-white mb-3">
-                            {is404
-                                ? "Sala no encontrada"
-                                : isAuthError
-                                ? "Sin permisos para controlar la sala"
-                                : "Error al cargar la sala"}
-                        </h2>
-
-                        <p
-                            className={`mb-6 ${
-                                is404 ? "text-yellow-200" : "text-red-200"
-                            }`}
-                        >
-                            {is404
-                                ? `La sala "${roomId}" no existe en el sistema.`
-                                : error}
-                        </p>
-
-                        <div className="space-y-3">
-                            {is404 ? (
-                                <>
-                                    <button
-                                        onClick={() => router.push("/create")}
-                                        className="px-6 py-3 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-xl font-medium transition-all"
-                                    >
-                                        Crear una sala nueva
-                                    </button>
-                                    <button
-                                        onClick={() => router.push("/")}
-                                        className="block w-full px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition-colors"
-                                    >
-                                        Ver salas disponibles
-                                    </button>
-                                </>
-                            ) : (
-                                <>
-                                    {isAuthError ? (
-                                        <button
-                                            onClick={() => router.push("/login")}
-                                            className="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-xl font-medium transition-colors"
-                                        >
-                                            Volver a iniciar sesión
-                                        </button>
-                                    ) : (
-                                        <button
-                                            onClick={() =>
-                                                window.location.reload()
-                                            }
-                                            className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors"
-                                        >
-                                            Reintentar
-                                        </button>
-                                    )}
-                                </>
-                            )}
-
-                            {!is404 && !isAuthError && (
-                                <div className="text-slate-400 text-sm">
-                                    <p>Asegúrate de que:</p>
-                                    <ul className="mt-2 space-y-1 text-left max-w-md mx-auto">
-                                        <li>• El backend esté corriendo</li>
-                                        <li>
-                                            • El sync-service esté accesible
-                                            (WebSocket)
-                                        </li>
-                                        <li>
-                                            • No haya problemas de red o CORS
-                                        </li>
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    const participants = members.map((m) => ({
-        id: m.user_id,
-        name:
-            m.preferred_username ??
-            m.nickname ??
-            m.username ??
-            m.user_id,
-        roles: m.roles,
-        canControlPlayback: m.can_control_playback,
-        canAddTracks: m.can_add_tracks,
-        canInvite: m.can_invite,
-    }));
-
-    const syncLabel =
-        socketStatus === "connected"
-            ? "sincronizada"
-            : socketStatus === "connecting"
-            ? "reconectando…"
-            : socketStatus === "authError"
-            ? "sin permisos de control"
-            : "sin conexión de sync";
-
-    const syncDotClass =
-        socketStatus === "connected"
-            ? "bg-emerald-400"
-            : socketStatus === "connecting"
-            ? "bg-yellow-400"
-            : socketStatus === "authError"
-            ? "bg-red-400"
-            : "bg-slate-500";
-
-    return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950">
-            <Header />
-
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="mb-6">
-                    <div className="flex items-center justify-between gap-4">
-                        <div className="min-w-0">
-                            <h1 className="text-3xl md:text-4xl font-bold text-white truncate">
-                                {room?.name ?? "Sala"}
-                            </h1>
-                            <div className="mt-1 flex items-center gap-3 text-sm text-slate-400">
-                                <span>Sala de colaboración musical</span>
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-900/60 text-slate-100 border border-slate-700/80">
-                                    <span
-                                        className={[
-                                            "w-2 h-2 rounded-full",
-                                            syncDotClass,
-                                            socketStatus === "connected" ||
-                                            socketStatus === "connecting"
-                                                ? "animate-pulse"
-                                                : "",
-                                        ].join(" ")}
-                                    />
-                                    {syncLabel}
-                                </span>
-
-                                {!!participants.length && (
-                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-200 border border-slate-600">
-                                        <svg
-                                            width="14"
-                                            height="14"
-                                            viewBox="0 0 24 24"
-                                            className="opacity-80"
-                                        >
-                                            <path
-                                                fill="currentColor"
-                                                d="M12 12a5 5 0 1 0-5-5a5 5 0 0 0 5 5m-7 8a7 7 0 0 1 14 0z"
-                                            />
-                                        </svg>
-                                        {participants.length}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                            <button
-                                onClick={() => setInviteOpen(true)}
-                                className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-4 md:px-6 py-2.5 rounded-full font-medium transition-all duration-200 hover:scale-[1.02]"
-                            >
-                                Invitar
-                            </button>
-
-                            {/* Botón para abandonar sala (todos los usuarios) */}
-                            <button
-                                onClick={handleLeaveRoom}
-                                disabled={isLeaving}
-                                className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white px-4 md:px-6 py-2.5 rounded-full font-medium transition-all duration-200 hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
-                            >
-                                {isLeaving ? "Saliendo..." : "Abandonar"}
-                            </button>
-
-                            {/* Botón para eliminar sala (solo host) */}
-                            {isHost && (
-                                <button
-                                    onClick={handleDeleteRoom}
-                                    disabled={isDeleting}
-                                    className="bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white px-4 md:px-6 py-2.5 rounded-full font-medium transition-all duration-200 hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
-                                >
-                                    {isDeleting ? "Eliminando..." : "Eliminar"}
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Modales de confirmación */}
-                    <ConfirmModal
-                        isOpen={leaveConfirmOpen}
-                        onClose={() => setLeaveConfirmOpen(false)}
-                        onConfirm={handleLeaveConfirm}
-                        title="Abandonar sala"
-                        message="¿Estás seguro de que quieres abandonar esta sala?"
-                        confirmText="Abandonar"
-                        type="warning"
-                    />
-
-                    <ConfirmModal
-                        isOpen={deleteConfirmOpen}
-                        onClose={() => setDeleteConfirmOpen(false)}
-                        onConfirm={handleDeleteConfirm}
-                        title="Eliminar sala"
-                        message="¿Estás seguro de que quieres eliminar esta sala? Esta acción no se puede deshacer y todos los participantes serán expulsados."
-                        confirmText="Eliminar"
-                        type="danger"
-                    />
-
-                    <ConfirmModal
-                        isOpen={removeMemberConfirm.isOpen}
-                        onClose={() =>
-                            setRemoveMemberConfirm({
-                                isOpen: false,
-                                memberId: "",
-                                memberName: "",
-                            })
-                        }
-                        onConfirm={handleRemoveMemberConfirm}
-                        title="Eliminar miembro"
-                        message={`¿Estás seguro de que quieres eliminar a "${removeMemberConfirm.memberName}" de la sala?`}
-                        confirmText="Eliminar"
-                        type="danger"
-                    />
-
-                    {membersError && (
-                        <p className="mt-2 text-xs text-red-400">
-                            {membersError}
-                        </p>
-                    )}
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-                    <div className="lg:col-span-2 space-y-6">
-                        <PlayerNow
-                            track={currentTrack}
-                            onAddClick={handleOpenAddDialog}
-                            onSkipClick={handleNext}
-                            onPreviousClick={handlePrevious}
-                            audioRef={audioRef}
-                            isPlaying={playbackState === "playing"}
-                            onPlayPause={emitPlayPause}
-                            onSeek={emitSeek}
-                            hasUserInteracted={hasUserInteracted}
-                            forcePlay={forcePlay}
-                        />
-
-                        <QueueList
-                            queue={queue}
-                            currentTrack={currentTrack}
-                            onAddClick={handleOpenAddDialog}
-                            onSelectTrack={handleSelectTrack}
-                        />
-                    </div>
-
-                    <aside className="space-y-6">
-                        <ParticipantsList
-                            members={members}
-                            isHost={isHost}
-                            onUpdatePermissions={updateMemberPermissions}
-                            onRemoveMember={handleRemoveMemberClick}
-                        />
-                        <ChatPanel />
-                    </aside>
-                </div>
-            </main>
-
-            <InviteDialog
-                open={inviteOpen}
-                onOpenChange={setInviteOpen}
-                roomId={roomId}
-            />
-
-            <AddSongDialog
-                open={addOpen}
-                onOpenChange={setAddOpen}
-                onAddSong={handleAddAndPlay}
-                onChangeExternalTrack={handleChangeExternalTrack}
-            />
+          {membersError && (
+            <p className="mt-2 text-xs text-red-400">
+              {membersError}
+            </p>
+          )}
         </div>
-    );
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <PlayerNow
+              track={currentTrack}
+              onAddClick={handleOpenAddDialog}
+              onSkipClick={handleNext}
+              onPreviousClick={handlePrevious}
+              audioRef={audioRef}
+              isPlaying={playbackState === "playing"}
+              onPlayPause={emitPlayPause}
+              onSeek={emitSeek}
+              hasUserInteracted={hasUserInteracted}
+              forcePlay={forcePlay}
+            />
+
+            <QueueList
+              queue={queue}
+              currentTrack={currentTrack}
+              onAddClick={handleOpenAddDialog}
+              onSelectTrack={handleSelectTrack}
+            />
+          </div>
+
+          <aside className="space-y-6">
+            <ParticipantsList
+              members={members}
+              isHost={isHost}
+              onUpdatePermissions={updateMemberPermissions}
+              onRemoveMember={handleRemoveMemberClick}
+            />
+            <ChatPanel />
+          </aside>
+        </div>
+      </main>
+
+      <InviteDialog
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        roomId={roomId}
+      />
+
+      <AddSongDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onAddSong={handleAddAndPlay}
+        onChangeExternalTrack={handleChangeExternalTrack}
+      />
+    </div>
+  );
 }
+
 
 
