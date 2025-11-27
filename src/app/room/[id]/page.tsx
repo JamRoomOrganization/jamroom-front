@@ -68,6 +68,7 @@ export default function RoomPage() {
     const {
         members,
         error: membersError,
+        isMember,
         reload: reloadMembers,
         updateMemberPermissions,
     } = useRoomMembers(roomId);
@@ -80,6 +81,7 @@ export default function RoomPage() {
         (member) => member.user_id === user?.id && member.roles?.includes("host")
     );
 
+    // Miembro actual y permisos
     const currentMember = members.find((m) => m.user_id === user?.id);
     const canAddTracks = !!currentMember?.can_add_tracks;
     const canControlPlayback = !!currentMember?.can_control_playback;
@@ -109,15 +111,6 @@ export default function RoomPage() {
         setDeleteConfirmOpen(true);
     };
 
-    const handleOpenAddDialog = () => {
-        if (!canAddTracks) {
-            alert("No tienes permiso para agregar canciones a la cola.");
-            return;
-        }
-        setAddOpen(true);
-    };
-
-
     const handleDeleteConfirm = async () => {
         setIsDeleting(true);
         try {
@@ -130,6 +123,15 @@ export default function RoomPage() {
             setIsDeleting(false);
             setDeleteConfirmOpen(false);
         }
+    };
+
+    // Handler para abrir diálogo de agregar canción respetando permisos
+    const handleOpenAddDialog = () => {
+        if (!canAddTracks) {
+            alert("No tienes permiso para agregar canciones a la cola.");
+            return;
+        }
+        setAddOpen(true);
     };
 
     // Handlers de confirm modal – ELIMINAR MIEMBRO
@@ -185,6 +187,16 @@ export default function RoomPage() {
             router.replace("/login");
         }
     }, [authLoading, user, router]);
+
+    // Expulsar al usuario si deja de ser miembro de la sala
+    useEffect(() => {
+        if (authLoading || !user) return;
+
+        if (!isMember) {
+            alert("Has sido eliminado de la sala por el host.");
+            router.replace("/");
+        }
+    }, [authLoading, user, isMember, router]);
 
     // Handler para canción anterior
     const handlePrevious = useCallback(async () => {
@@ -263,7 +275,7 @@ export default function RoomPage() {
         });
     }, [queue, currentTrack, changeTrackFromExternalStream]);
 
-    // Añadir a la cola sin reproducir automáticamente
+    // Añadir a la cola sin reproducir automáticamente (respetando permisos)
     const handleAddAndPlay = useCallback(
         async (
             trackId: string,
@@ -289,7 +301,6 @@ export default function RoomPage() {
         },
         [addTrack, canAddTracks]
     );
-
 
     // Adaptador para onChangeExternalTrack del diálogo (Audius)
     const handleChangeExternalTrack = useCallback(
@@ -617,7 +628,7 @@ export default function RoomPage() {
                     <div className="lg:col-span-2 space-y-6">
                         <PlayerNow
                             track={currentTrack}
-                            onAddClick={() => setAddOpen(true)}
+                            onAddClick={handleOpenAddDialog}
                             onSkipClick={handleNext}
                             onPreviousClick={handlePrevious}
                             audioRef={audioRef}
@@ -663,4 +674,5 @@ export default function RoomPage() {
         </div>
     );
 }
+
 
