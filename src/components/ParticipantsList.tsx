@@ -1,3 +1,4 @@
+// components/ParticipantsList.tsx (actualizado)
 "use client";
 
 import React, { useState } from "react";
@@ -9,6 +10,7 @@ type ParticipantsListProps = {
   members?: RoomMember[];
   isHost?: boolean;
   onUpdatePermissions?: (targetUserId: string, permissions: any) => Promise<void>;
+  onRemoveMember?: (targetUserId: string) => Promise<void>; // ← Nueva prop
 };
 
 function initials(name?: string) {
@@ -24,24 +26,23 @@ const ParticipantsList = React.memo(function ParticipantsList({
   participants = [], 
   members = [],
   isHost = false,
-  onUpdatePermissions 
+  onUpdatePermissions,
+  onRemoveMember // ← Nueva prop
 }: ParticipantsListProps) {
   const [selectedMember, setSelectedMember] = useState<RoomMember | null>(null);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
 
-  // Función para obtener el nombre de display
   const getDisplayName = (member: RoomMember) => {
     return member.nickname || member.preferred_username || member.username || 'Usuario';
   };
 
-  // Si no hay members, usar participants (para mantener compatibilidad)
   const displayMembers = members.length > 0 ? members : participants.map(p => ({
     user_id: p.id,
     room_id: '',
     roles: p.role ? [p.role] : ['member'],
     username: p.name,
-    preferred_username: undefined, 
-    nickname: undefined, 
+    preferred_username: undefined,
+    nickname: undefined,
     can_add_tracks: false,
     can_control_playback: false,
     can_invite: false,
@@ -75,21 +76,37 @@ const ParticipantsList = React.memo(function ParticipantsList({
                 </div>
               </div>
               
-              <div className="flex items-center gap-2">
-                {/* Botón para editar permisos (solo para host y para miembros no hosts) */}
-                {isHost && !member.roles?.includes('host') && onUpdatePermissions && (
-                  <button
-                    onClick={() => {
-                      setSelectedMember(member);
-                      setShowPermissionsModal(true);
-                    }}
-                    className="text-purple-400 hover:text-purple-300 text-sm px-2 py-1 rounded border border-purple-400/30 hover:border-purple-400/50 transition-colors"
-                    title="Editar permisos"
-                  >
-                    Permisos
-                  </button>
+              <div className="flex items-center gap-2">              
+                {/* Botones de acciones para el host */}
+                {isHost && !member.roles?.includes('host') && (
+                  <div className="flex gap-1">
+                    {onUpdatePermissions && (
+                      <button
+                        onClick={() => {
+                          setSelectedMember(member);
+                          setShowPermissionsModal(true);
+                        }}
+                        className="text-purple-400 hover:text-purple-300 text-xs px-2 py-1 rounded border border-purple-400/30 hover:border-purple-400/50 transition-colors"
+                        title="Editar permisos"
+                      >
+                        Permisos
+                      </button>
+                    )}
+                    {onRemoveMember && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`¿Eliminar a ${getDisplayName(member)} de la sala?`)) {
+                            onRemoveMember(member.user_id);
+                          }
+                        }}
+                        className="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded border border-red-400/30 hover:border-red-400/50 transition-colors"
+                        title="Eliminar miembro"
+                      >
+                        Eliminar
+                      </button>
+                    )}
+                  </div>
                 )}
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
               </div>
             </li>
           ))}

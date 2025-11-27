@@ -15,6 +15,7 @@ import { useRoomMembers } from "@/hooks/useRoomMembers";
 import { useRoomQueue } from "@/hooks/useRoomQueue";    
 import type { Track } from "@/types";
 import { RoomMember } from "@/hooks/useRoomMembers";
+import { useRoomActions } from "@/hooks/useRoomActions";
 
 export default function RoomPage() {
     const router = useRouter();
@@ -43,13 +44,62 @@ export default function RoomPage() {
     const [inviteOpen, setInviteOpen] = React.useState(false);
     const [addOpen, setAddOpen] = React.useState(false);
 
-    const { members, loading: membersLoading, error: membersError, updateMemberPermissions } = useRoomMembers(roomId);
+    const { members, loading: membersLoading, error: membersError, reload: reloadMembers, updateMemberPermissions } = useRoomMembers(roomId);
 
     const { queue, loading: queueLoading, addTrack } = useRoomQueue(roomId);
 
     const isHost = members.some(
         member => member.user_id === user?.id && member.roles?.includes('host')
     );
+
+    const { deleteRoom, leaveRoom, removeMember } = useRoomActions(roomId);
+    const [isLeaving, setIsLeaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const handleDeleteRoom = async () => {
+    if (!confirm("¿Estás seguro de que quieres eliminar esta sala? Esta acción no se puede deshacer.")) {
+        return;
+    }
+
+    setIsDeleting(true);
+    try {
+        await deleteRoom();
+        // La redirección se maneja en el hook
+    } catch (error) {
+        console.error("Error deleting room:", error);
+        alert("Error al eliminar la sala");
+    } finally {
+        setIsDeleting(false);
+    }
+    };
+
+    const handleLeaveRoom = async () => {
+    if (!confirm("¿Estás seguro de que quieres abandonar esta sala?")) {
+        return;
+    }
+
+    setIsLeaving(true);
+    try {
+        await leaveRoom();
+        // La redirección se maneja en el hook
+    } catch (error) {
+        console.error("Error leaving room:", error);
+        alert("Error al abandonar la sala");
+    } finally {
+        setIsLeaving(false);
+    };
+    };
+
+    const handleRemoveMember = async (targetUserId: string) => {
+    try {
+        await removeMember(targetUserId);
+        // Recargar la lista de miembros
+        await reloadMembers(); // Esta función viene de useRoomMembers
+    } catch (error) {
+        console.error("Error removing member:", error);
+        alert("Error al eliminar miembro");
+    }
+    };
 
     // Derivar currentTrack de la cola y del currentTrackId lógico
     const currentTrack: Track | undefined = React.useMemo(() => {
@@ -420,6 +470,7 @@ export default function RoomPage() {
                                     />
                                     {syncLabel}
                                 </span>
+                                
                                 {!!participants.length && (
                                     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-200 border border-slate-600">
                                         <svg
@@ -446,6 +497,26 @@ export default function RoomPage() {
                             >
                                 Invitar
                             </button>
+                            
+                            {/* Botón para abandonar sala (todos los usuarios) */}
+                            <button
+                                onClick={handleLeaveRoom}
+                                disabled={isLeaving}
+                                className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white px-4 md:px-6 py-2.5 rounded-full font-medium transition-all duration-200 hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
+                            >
+                                {isLeaving ? "Saliendo..." : "Abandonar"}
+                            </button>
+
+                            {/* Botón para eliminar sala (solo host) */}
+                            {isHost && (
+                                <button
+                                    onClick={handleDeleteRoom}
+                                    disabled={isDeleting}
+                                    className="bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white px-4 md:px-6 py-2.5 rounded-full font-medium transition-all duration-200 hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
+                                >
+                                    {isDeleting ? "Eliminando..." : "Eliminar"}
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -484,6 +555,7 @@ export default function RoomPage() {
                             members={members}
                             isHost={isHost}
                             onUpdatePermissions={updateMemberPermissions}
+                            onRemoveMember={handleRemoveMember}
                         />
                         <ChatPanel />
                     </aside>
