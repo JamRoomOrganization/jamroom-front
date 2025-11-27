@@ -18,5 +18,13 @@ export type LobbyRoom = {
   id: string;
   name: string;
   description?: string;
+  is_public?: boolean;
+  current_track_count: number;
+  member_count: number;  
+  host: {
+    displayName: string;
+  };
+  created_at: string;
+  updated_at: string;
   participants?: number;
 };

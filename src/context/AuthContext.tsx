@@ -63,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         id: payload.sub,
         email: payload.email ?? "",
         name:
+          payload.preferred_username ??
           payload.nickname ??
           payload.name ??
           payload["cognito:username"] ??
@@ -93,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("idToken", tokens.idToken);
       localStorage.setItem("accessToken", tokens.accessToken);
       localStorage.setItem("refreshToken", tokens.refreshToken);
-      localStorage.setItem("jr_token", tokens.accessToken);
+      localStorage.setItem("jr_token", tokens.idToken);
 
       const payload = parseJwt(tokens.idToken);
 
@@ -101,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         id: payload.sub,
         email: payload.email ?? email,
         name:
+          payload.preferred_username ??
           payload.nickname ??
           payload.name ??
           payload["cognito:username"] ??

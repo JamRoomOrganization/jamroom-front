@@ -8,6 +8,8 @@ export type RoomMember = {
   user_id: string;
   roles: string[] | null;
   username?: string;
+  preferred_username?: string;
+  nickname?: string; 
   can_add_tracks: boolean;
   can_control_playback: boolean;
   can_invite: boolean;

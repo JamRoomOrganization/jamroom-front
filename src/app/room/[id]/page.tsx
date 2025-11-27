@@ -356,12 +356,18 @@ export default function RoomPage() {
 
     const participants = members.map((m) => ({
         id: m.user_id,
-        name: m.username || m.user_id,
+        name:
+            m.preferred_username ??
+            m.nickname ??
+            m.username ??
+            user?.name ??
+            m.user_id,
         roles: m.roles,
         canControlPlayback: m.can_control_playback,
         canAddTracks: m.can_add_tracks,
         canInvite: m.can_invite,
     }));
+
 
     const syncLabel =
         socketStatus === "connected"

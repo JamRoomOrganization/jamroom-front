@@ -1,10 +1,9 @@
+import type { LobbyRoom } from "../types";
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001";
 
-console.log("[api] API_BASE_URL =", API_BASE_URL);
-
-// Solo lanzar error en cliente en producción, no durante el build
 if (typeof window !== "undefined" && process.env.NODE_ENV === "production" && !API_BASE_URL) {
   throw new Error("NEXT_PUBLIC_API_BASE_URL environment variable must be set in production.");
 }
@@ -16,6 +15,19 @@ type FetchOptions = {
   auth?: boolean;
   withCredentials?: boolean;
 };
+
+export async function fetchPublicRooms(): Promise<LobbyRoom[]> {
+  try {
+    const res = await api.get<LobbyRoom[]>('/api/rooms/public', false);
+    if (res && Array.isArray((res as any).data)) return (res as any).data;
+    if (Array.isArray(res)) return res as unknown as LobbyRoom[];
+    return [];
+  } catch (error) {
+    console.error('Error fetching public rooms:', error);
+    throw error;
+  }
+}
+
 
 export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
@@ -31,7 +43,6 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   }
 
   try {
-    console.log(`[API] ${options.method || "GET"} ${url}`);
 
     const res = await fetch(url, {
       method: options.method || "GET",
@@ -54,10 +65,8 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
       throw new Error(message);
     }
 
-    console.log(`[API] ✓ ${options.method || "GET"} ${url}`, data);
     return data as T;
   } catch (error) {
-    // Mejorar el mensaje de error para debugging
     if (error instanceof TypeError && error.message === "Failed to fetch") {
       console.error(`[API] Failed to fetch ${url}`);
       console.error(`[API] Posibles causas:`);

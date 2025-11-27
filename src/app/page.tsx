@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Header from "../components/Header";
 import RoomCard from "../components/RoomCard";
-import { fetchRooms } from "../lib/mockApi";
+import { fetchPublicRooms } from "../lib/api";
 import type { LobbyRoom } from "../types";
 import { HomeHero } from "../components/home/HomeHero";
 import { RoomsSection } from "../components/home/RoomsSection";
@@ -19,12 +19,18 @@ export default function Home() {
     (async () => {
       try {
         setLoading(true);
-        const data = await fetchRooms();
+        const data = await fetchPublicRooms(); 
+        
+        const transformedData = data.map(room => ({
+          ...room,
+          participants: room.member_count 
+        }));
+        
         if (mounted) {
-          setRooms(data); 
+          setRooms(transformedData); 
         }
       } catch (e: any) {
-        console.error("[home] fetchRooms error", e);
+        console.error("[home] fetchPublicRooms error", e);
         if (mounted) setError("No fue posible cargar las salas activas.");
       } finally {
         if (mounted) setLoading(false);
@@ -35,7 +41,6 @@ export default function Home() {
       mounted = false;
     };
   }, []);
-
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
