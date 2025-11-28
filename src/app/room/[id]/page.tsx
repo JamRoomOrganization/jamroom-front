@@ -21,11 +21,20 @@ import { useRoomQueue } from "@/hooks/useRoomQueue";
 import type { Track } from "@/types";
 import { useRoomActions } from "@/hooks/useRoomActions";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { useToast } from "@/hooks/useToast";
 
 export default function RoomPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const roomId = params.id;
+
+  const { user, loading: authLoading } = useAuth();
+  const {
+    success: showSuccessToast,
+    error: showErrorToast,
+    info: showInfoToast,
+    warning: showWarningToast,
+  } = useToast();
 
   // Estado para modales
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
@@ -47,8 +56,6 @@ export default function RoomPage() {
   // Estado de acciones de sala
   const [isLeaving, setIsLeaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  const { user, loading: authLoading } = useAuth();
 
   const {
     room,
@@ -84,9 +91,7 @@ export default function RoomPage() {
 
   const currentMember = members.find((m) => m.user_id === user?.id);
 
-  // Host siempre puede agregar; si no es host, respeta can_add_tracks
-  const canAddTracks =
-    isHost || !!currentMember?.can_add_tracks;
+  const canAddTracks = isHost || !!currentMember?.can_add_tracks;
   const canControlPlayback =
     !!currentMember?.can_control_playback || isHost;
   const canInvite = !!currentMember?.can_invite || isHost;
@@ -100,10 +105,13 @@ export default function RoomPage() {
     setIsLeaving(true);
     try {
       await leaveRoom();
+      showSuccessToast("Has abandonado la sala.");
       // La redirección se maneja en el hook
     } catch (error) {
       console.error("Error leaving room:", error);
-      alert("Error al abandonar la sala");
+      showErrorToast(
+        "Error al abandonar la sala. Inténtalo de nuevo."
+      );
     } finally {
       setIsLeaving(false);
       setLeaveConfirmOpen(false);
@@ -119,10 +127,13 @@ export default function RoomPage() {
     setIsDeleting(true);
     try {
       await deleteRoom();
+      showSuccessToast("Sala eliminada correctamente.");
       // La redirección se maneja en el hook
     } catch (error) {
       console.error("Error deleting room:", error);
-      alert("Error al eliminar la sala");
+      showErrorToast(
+        "Error al eliminar la sala. Inténtalo de nuevo."
+      );
     } finally {
       setIsDeleting(false);
       setDeleteConfirmOpen(false);
@@ -131,7 +142,9 @@ export default function RoomPage() {
 
   const handleOpenAddDialog = () => {
     if (!canAddTracks) {
-      alert("No tienes permiso para agregar canciones a la cola.");
+      showErrorToast(
+        "No tienes permiso para agregar canciones a la cola."
+      );
       return;
     }
     setAddOpen(true);
@@ -153,9 +166,12 @@ export default function RoomPage() {
     try {
       await removeMember(removeMemberConfirm.memberId);
       await reloadMembers();
+      showSuccessToast("Miembro eliminado de la sala.");
     } catch (error) {
       console.error("Error removing member:", error);
-      alert("Error al eliminar miembro");
+      showErrorToast(
+        "Error al eliminar miembro. Inténtalo de nuevo."
+      );
     } finally {
       setRemoveMemberConfirm({
         isOpen: false,
@@ -200,10 +216,10 @@ export default function RoomPage() {
     if (!user) return;
 
     if (isMember === false) {
-      alert("Has sido eliminado de la sala por el host.");
+      showInfoToast("Has sido eliminado de la sala por el host.");
       router.replace("/");
     }
-  }, [authLoading, user, isMember, router]);
+  }, [authLoading, user, isMember, router, showInfoToast]);
 
   // Handler para canción anterior
   const handlePrevious = useCallback(async () => {
@@ -301,7 +317,9 @@ export default function RoomPage() {
       }
     ) => {
       if (!canAddTracks) {
-        alert("No tienes permiso para agregar canciones a la cola.");
+        showErrorToast(
+          "No tienes permiso para agregar canciones a la cola."
+        );
         return;
       }
 
@@ -313,11 +331,15 @@ export default function RoomPage() {
         console.log(
           "[Room] Canción agregada a la cola exitosamente"
         );
+        showSuccessToast("Canción agregada a la cola.");
       } catch (err) {
         console.error("[Room] Error al agregar canción:", err);
+        showErrorToast(
+          "No se pudo agregar la canción. Inténtalo de nuevo."
+        );
       }
     },
-    [addTrack, canAddTracks]
+    [addTrack, canAddTracks, showErrorToast, showSuccessToast]
   );
 
   // Adaptador para onChangeExternalTrack del diálogo (Audius)
@@ -472,9 +494,7 @@ export default function RoomPage() {
                   <p>Asegúrate de que:</p>
                   <ul className="mt-2 space-y-1 text-left max-w-md mx-auto">
                     <li>• El backend esté corriendo</li>
-                    <li>
-                      • El sync-service esté accesible (WebSocket)
-                    </li>
+                    <li>• El sync-service esté accesible (WebSocket)</li>
                     <li>• No haya problemas de red o CORS</li>
                   </ul>
                 </div>
@@ -687,6 +707,7 @@ export default function RoomPage() {
     </div>
   );
 }
+
 
 
 
