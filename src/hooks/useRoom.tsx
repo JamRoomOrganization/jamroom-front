@@ -1,4 +1,4 @@
-// src/hooks/useRoom.ts
+// src/hooks/useRoom.tsx
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -18,10 +18,11 @@ export type Room = {
 type SyncPacket = {
     roomId?: string;
     serverTimeMs?: number;
-    trackId?: string; // ID lógico Audius
+    trackId?: string;
     playbackState?: "playing" | "paused";
     positionMs?: number;
     version?: number;
+    serverProcessingMs?: number;
 };
 
 type SocketStatus = "disconnected" | "connecting" | "connected" | "authError";
@@ -49,7 +50,7 @@ function useRoom(roomId: string) {
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     const [playbackState, setPlaybackState] = useState<"playing" | "paused">("paused");
-    const [currentTrackId, setCurrentTrackId] = useState<string | null>(null); // ID lógico Audius
+    const [currentTrackId, setCurrentTrackId] = useState<string | null>(null);
 
     const [hasUserInteracted, setHasUserInteracted] = useState(false);
     const hasUserInteractedRef = useRef(false);
@@ -62,29 +63,23 @@ function useRoom(roomId: string) {
 
     const initialSyncRef = useRef(false);
     const audioInitializedRef = useRef(false);
-
-    // NUEVO: Ref para evitar cambios automáticos de track
     const preventAutoChangeRef = useRef(false);
-
-    // 🆕 Ref para prevenir múltiples intentos de reproducción
     const isLoadingTrackRef = useRef(false);
     const pendingPlaybackRef = useRef<{ state: "playing" | "paused"; position?: number } | null>(null);
 
-    // ------------------ helpers ------------------
+    // 🆕 Ref para almacenar latencia estimada
+    const estimatedLatencyRef = useRef<number>(0);
+
 
     const getAccessToken = useCallback(() => {
         if (typeof window === "undefined") return null;
-
         const jrToken = localStorage.getItem("jr_token");
         if (jrToken) return jrToken;
-
         const legacyAccessToken = localStorage.getItem("accessToken");
         if (legacyAccessToken) return legacyAccessToken;
-
         return null;
     }, []);
 
-    // Resolver streamUrl a partir del trackId lógico, con caché
     const ensureStreamUrlForTrack = useCallback(
         async (trackId: string): Promise<string | null> => {
             if (!trackId) return null;
@@ -109,10 +104,9 @@ function useRoom(roomId: string) {
                 return null;
             }
         },
-        [] // ✅ Sin dependencias - función estable
+        []
     );
 
-    // 🆕 Función mejorada para cargar y reproducir tracks
     const loadAndPlayTrack = useCallback(
         async (trackId: string, streamUrl: string, shouldPlay: boolean, positionMs?: number) => {
             const audio = audioRef.current;
@@ -121,18 +115,16 @@ function useRoom(roomId: string) {
                 return false;
             }
 
-            // ✅ Timeout automático para evitar bloqueos
             const loadTimeout = setTimeout(() => {
                 if (isLoadingTrackRef.current) {
-                    console.warn("[useRoom] ⚠️ Timeout de carga - liberando estado");
+                    console.warn("[useRoom] Timeout de carga - liberando estado");
                     isLoadingTrackRef.current = false;
                 }
-            }, 8000); // 8 segundos máximo
+            }, 8000);
 
-            // Evitar múltiples cargas simultáneas
             if (isLoadingTrackRef.current) {
                 console.log("[useRoom] ⏳ Ya hay una carga en progreso, guardando estado pendiente");
-                clearTimeout(loadTimeout); // ✅ Limpiar timeout si hay cola
+                clearTimeout(loadTimeout);
                 pendingPlaybackRef.current = {
                     state: shouldPlay ? "playing" : "paused",
                     position: positionMs
@@ -150,15 +142,11 @@ function useRoom(roomId: string) {
                     hasInteracted: hasUserInteractedRef.current
                 });
 
-                // 1. Pausar y limpiar audio actual
                 audio.pause();
                 audio.currentTime = 0;
-
-                // 2. Establecer nuevo source
                 audio.src = streamUrl;
                 setCurrentTrackId(trackId);
 
-                // 3. Esperar a que el audio esté listo
                 await new Promise<void>((resolve, reject) => {
                     let resolved = false;
                     const timeout = setTimeout(() => {
@@ -168,7 +156,7 @@ function useRoom(roomId: string) {
                             audio.removeEventListener("error", onError);
                             reject(new Error("Timeout cargando audio"));
                         }
-                    }, 5000); // ✅ 5 segundos
+                    }, 5000);
 
                     const onReady = () => {
                         if (!resolved) {
@@ -197,7 +185,6 @@ function useRoom(roomId: string) {
 
                 console.log("[useRoom] ✓ Audio cargado exitosamente");
 
-                // 4. Ajustar posición si se especificó
                 if (typeof positionMs === "number") {
                     const targetPos = Math.max(0, positionMs / 1000);
                     audio.currentTime = targetPos;
@@ -206,7 +193,6 @@ function useRoom(roomId: string) {
 
                 audioInitializedRef.current = true;
 
-                // 5. Reproducir si se requiere
                 if (shouldPlay) {
                     console.log("[useRoom] 🎶 Intentando reproducir");
                     try {
@@ -215,11 +201,12 @@ function useRoom(roomId: string) {
                         setHasUserInteracted(true);
                         setPlaybackState("playing");
                         console.log("[useRoom] ✓ Reproducción iniciada exitosamente");
-                        clearTimeout(loadTimeout); // ✅ Limpiar timeout en éxito
+                        clearTimeout(loadTimeout);
                         return true;
-                    } catch (err: any) {
-                        if (err.name === "NotAllowedError") {
-                            console.warn("[useRoom] ⚠ Requiere interacción del usuario");
+                    } catch (err: unknown) {
+                        const error = err as { name?: string };
+                        if (error.name === "NotAllowedError") {
+                            console.warn("[useRoom]  Requiere interacción del usuario");
                             setPlaybackState("paused");
                             clearTimeout(loadTimeout);
                             return false;
@@ -233,16 +220,15 @@ function useRoom(roomId: string) {
                 }
             } catch (err) {
                 console.error("[useRoom] ❌ Error cargando/reproduciendo track:", err);
-                clearTimeout(loadTimeout); // ✅ Siempre limpiar timeout
+                clearTimeout(loadTimeout);
                 return false;
             } finally {
-                isLoadingTrackRef.current = false; // ✅ SIEMPRE liberar estado
+                isLoadingTrackRef.current = false;
 
-                // Procesar estado pendiente si existe
                 if (pendingPlaybackRef.current) {
                     const pending = pendingPlaybackRef.current;
                     pendingPlaybackRef.current = null;
-                    console.log("[useRoom] 📝 Procesando estado pendiente:", pending);
+                    console.log("[useRoom]  Procesando estado pendiente:", pending);
 
                     if (pending.state === "playing") {
                         setTimeout(() => {
@@ -263,7 +249,57 @@ function useRoom(roomId: string) {
         []
     );
 
-    // ------------------ detectar interacción user (autoplay) ------------------
+    // 🆕 Función para medir RTT
+    const measureRTT = useCallback(async (socket: Socket): Promise<number> => {
+        const measurements: number[] = [];
+
+        for (let i = 0; i < 3; i++) {
+            const t0 = Date.now();
+
+            await new Promise<void>((resolve) => {
+                const timeout = setTimeout(() => {
+                    console.warn("[useRoom] measureLatency timeout");
+                    resolve();
+                }, 2000);
+
+                socket.emit("measureLatency", { clientTimestamp: t0 });
+
+                const handler = ({ clientTimestamp, serverTimestamp }: { clientTimestamp: number; serverTimestamp: number }) => {
+                    clearTimeout(timeout);
+                    const t1 = Date.now();
+                    const rtt = t1 - clientTimestamp;
+                    measurements.push(rtt);
+                    socket.off("latencyResponse", handler);
+                    resolve();
+                };
+
+                socket.on("latencyResponse", handler);
+            });
+
+            if (i < 2) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+
+        if (measurements.length === 0) {
+            console.warn("[useRoom] No se pudo medir RTT, usando 0");
+            return 0;
+        }
+
+        measurements.sort((a, b) => a - b);
+        const medianRTT = measurements[Math.floor(measurements.length / 2)];
+        const latency = medianRTT / 2;
+
+        console.log("[useRoom] RTT medido:", {
+            measurements,
+            medianRTT,
+            estimatedLatency: latency
+        });
+
+        return latency;
+    }, []);
+
+    // ------------------ detectar interacción user ------------------
 
     useEffect(() => {
         const handleInteraction = () => {
@@ -287,7 +323,6 @@ function useRoom(roomId: string) {
         };
     }, []);
 
-    // ------------------ cargar metadata básica sala ------------------
 
     useEffect(() => {
         if (!roomId) return;
@@ -332,7 +367,6 @@ function useRoom(roomId: string) {
         };
     }, [roomId]);
 
-    // ------------------ conexión socket.io ------------------
 
     useEffect(() => {
         if (!roomId) return;
@@ -369,7 +403,7 @@ function useRoom(roomId: string) {
 
         socketRef.current = socket;
 
-        socket.on("connect", () => {
+        socket.on("connect", async () => {
             console.log("[useRoom] Conectado a sync-service", {
                 socketId: socket.id,
                 roomId,
@@ -378,11 +412,23 @@ function useRoom(roomId: string) {
             setSocketStatus("connected");
             setError(null);
 
+            // 🆕 Medir latencia al conectar
+            try {
+                const latency = await measureRTT(socket);
+                estimatedLatencyRef.current = latency;
+                console.log("[useRoom] Latencia estimada:", latency, "ms");
+            } catch (err) {
+                console.warn("[useRoom] Error midiendo latencia:", err);
+                estimatedLatencyRef.current = 0;
+            }
+
+            // 🆕 Enviar timestamp del cliente para métricas
             socket.emit("joinRoom", {
                 roomId,
                 room_id: roomId,
                 userId,
                 user_id: userId,
+                clientJoinTimestamp: Date.now(),
             });
 
             console.log("[useRoom] joinRoom emitido");
@@ -417,7 +463,109 @@ function useRoom(roomId: string) {
             console.warn("[useRoom] controlError", msg);
         });
 
-        // 🆕 Handler mejorado de syncPacket
+        // 🆕 Handler de initialSync (prioridad sobre syncPacket)
+        socket.on("initialSync", async (pkt: SyncPacket & { version?: number }) => {
+            const audio = audioRef.current;
+            if (!audio) {
+                console.warn("[useRoom] initialSync ignorado: no hay ref de audio");
+                return;
+            }
+
+            console.log("[useRoom] 🎯 initialSync recibido:", pkt);
+
+            const { trackId, playbackState: newPlaybackState, positionMs, serverTimeMs, serverProcessingMs } = pkt;
+
+            // Log de métricas del servidor
+            if (serverProcessingMs !== undefined) {
+                console.log("[useRoom] Servidor procesó initialSync en:", serverProcessingMs, "ms");
+            }
+
+            if (!trackId) {
+                console.warn("[useRoom] initialSync sin trackId");
+                return;
+            }
+
+            // 🆕 Compensar latencia de red
+            const latency = estimatedLatencyRef.current;
+            const compensatedServerTime = (serverTimeMs || Date.now()) + latency;
+            const localTime = Date.now();
+            const timeDiff = compensatedServerTime - localTime;
+            const adjustedPositionMs = (positionMs || 0) + Math.max(0, timeDiff);
+
+            console.log("[useRoom] Compensación de latencia:", {
+                positionMs,
+                adjustedPositionMs,
+                latency,
+                timeDiff
+            });
+
+            // Resolver streamUrl
+            const streamUrl = await ensureStreamUrlForTrack(trackId);
+            if (!streamUrl) {
+                console.warn("[useRoom] No se pudo resolver streamUrl para initialSync");
+                return;
+            }
+
+            // Cargar y reproducir inmediatamente
+            const shouldPlay = newPlaybackState === "playing";
+            await loadAndPlayTrack(trackId, streamUrl, shouldPlay, adjustedPositionMs);
+
+            initialSyncRef.current = true;
+
+            console.log("[useRoom] ✓ initialSync aplicado exitosamente");
+        });
+
+        // 🆕 Handler de prebuffer
+        socket.on("prebuffer", async ({ trackId, estimatedStartMs }: { trackId: string; estimatedStartMs: number }) => {
+            const audio = audioRef.current;
+            if (!audio) return;
+
+            console.log("[useRoom] 📦 prebuffer solicitado:", { trackId, estimatedStartMs });
+
+            try {
+                const streamUrl = await ensureStreamUrlForTrack(trackId);
+                if (!streamUrl) {
+                    console.warn("[useRoom] No se pudo prebuffer track:", trackId);
+                    return;
+                }
+
+                audio.pause();
+                audio.src = streamUrl;
+                setCurrentTrackId(trackId);
+
+                await new Promise<void>((resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error("Timeout prebuffer")), 3000);
+
+                    const onReady = () => {
+                        clearTimeout(timeout);
+                        audio.removeEventListener("canplay", onReady);
+                        audio.removeEventListener("error", onError);
+                        resolve();
+                    };
+
+                    const onError = (e: Event) => {
+                        clearTimeout(timeout);
+                        audio.removeEventListener("canplay", onReady);
+                        audio.removeEventListener("error", onError);
+                        reject(e);
+                    };
+
+                    audio.addEventListener("canplay", onReady, { once: true });
+                    audio.addEventListener("error", onError, { once: true });
+                    audio.load();
+                });
+
+                if (typeof estimatedStartMs === "number") {
+                    audio.currentTime = estimatedStartMs / 1000;
+                }
+
+                console.log("[useRoom] ✓ Prebuffer completado para:", trackId);
+            } catch (err) {
+                console.error("[useRoom] Error en prebuffer:", err);
+            }
+        });
+
+        // Handler de syncPacket (mejorado con compensación)
         socket.on("syncPacket", async (pkt: SyncPacket) => {
             const audio = audioRef.current;
             if (!audio) {
@@ -425,34 +573,42 @@ function useRoom(roomId: string) {
                 return;
             }
 
-            const { trackId, playbackState: newPlaybackState, positionMs } = pkt;
+            const { trackId, playbackState: newPlaybackState, positionMs, serverTimeMs } = pkt;
             const last = lastSyncStateRef.current;
 
             const trackChanged = !!trackId && trackId !== last.trackId;
             const isInitialSync = !initialSyncRef.current;
 
+            // 🆕 Compensar latencia de red
+            const latency = estimatedLatencyRef.current;
+            const compensatedServerTime = (serverTimeMs || Date.now()) + latency;
+            const localTime = Date.now();
+            const timeDiff = compensatedServerTime - localTime;
+            const adjustedPositionMs = (positionMs || 0) + Math.max(0, timeDiff);
+
             console.log("[useRoom] syncPacket recibido:", {
                 trackId: pkt.trackId,
                 playbackState: pkt.playbackState,
                 positionMs: pkt.positionMs,
+                adjustedPositionMs,
+                latency,
+                timeDiff,
                 isInitialSync,
                 trackChanged,
                 isLoading: isLoadingTrackRef.current
             });
 
-            // Si hay una carga en progreso, guardar estado pendiente
             if (isLoadingTrackRef.current) {
                 console.log("[useRoom] Carga en progreso, guardando estado pendiente");
                 if (newPlaybackState) {
                     pendingPlaybackRef.current = {
                         state: newPlaybackState,
-                        position: positionMs
+                        position: adjustedPositionMs
                     };
                 }
                 return;
             }
 
-            // Resolver streamUrl
             let streamUrl: string | null = null;
             if (trackId) {
                 streamUrl = await ensureStreamUrlForTrack(trackId);
@@ -462,15 +618,13 @@ function useRoom(roomId: string) {
                 }
             }
 
-            // CAMBIO DE TRACK
             if (trackId && streamUrl && (trackChanged || isInitialSync)) {
                 const shouldPlay = newPlaybackState === "playing";
-                await loadAndPlayTrack(trackId, streamUrl, shouldPlay, positionMs);
+                await loadAndPlayTrack(trackId, streamUrl, shouldPlay, adjustedPositionMs);
                 initialSyncRef.current = true;
             }
-            // AJUSTE DE POSICIÓN (sin cambiar track)
-            else if (!trackChanged && typeof positionMs === "number" && !isInitialSync) {
-                const targetPos = positionMs / 1000;
+            else if (!trackChanged && typeof adjustedPositionMs === "number" && !isInitialSync) {
+                const targetPos = adjustedPositionMs / 1000;
                 const currentPos = audio.currentTime;
                 const diff = Math.abs(targetPos - currentPos);
 
@@ -480,17 +634,17 @@ function useRoom(roomId: string) {
                 }
             }
 
-            // CONTROL PLAY/PAUSE
             if (newPlaybackState && audioInitializedRef.current) {
                 if (newPlaybackState === "playing" && audio.paused) {
-                    console.log("[useRoom] ▶️ Reproduciendo");
+                    console.log("[useRoom]  Reproduciendo");
                     try {
                         await audio.play();
                         hasUserInteractedRef.current = true;
                         setHasUserInteracted(true);
                         setPlaybackState("playing");
-                    } catch (err: any) {
-                        if (err.name !== "NotAllowedError" && err.name !== "AbortError") {
+                    } catch (err: unknown) {
+                        const error = err as { name?: string };
+                        if (error.name !== "NotAllowedError" && error.name !== "AbortError") {
                             console.error("[useRoom] Error al reproducir:", err);
                         }
                     }
@@ -501,11 +655,10 @@ function useRoom(roomId: string) {
                 }
             }
 
-            // Actualizar estado local
             lastSyncStateRef.current = {
                 trackId: trackId || last.trackId,
                 playbackState: newPlaybackState || last.playbackState,
-                positionMs: positionMs ?? last.positionMs,
+                positionMs: adjustedPositionMs ?? last.positionMs,
             };
         });
 
@@ -524,14 +677,13 @@ function useRoom(roomId: string) {
             isLoadingTrackRef.current = false;
             pendingPlaybackRef.current = null;
         };
-    }, [roomId, user]); // ✅ SOLO roomId y user - NO funciones
+    }, [roomId, user, getAccessToken, measureRTT, ensureStreamUrlForTrack, loadAndPlayTrack]);
 
-    // ------------------ listener de error persistente para recuperación ------------------
+    // ------------------ listener de error persistente ------------------
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
 
-        // Handler de error robusto
         const handleError = (e: Event) => {
             console.error("[useRoom] Error de audio:", e);
             const target = e.target as HTMLAudioElement;
@@ -540,7 +692,6 @@ function useRoom(roomId: string) {
                 console.error("[useRoom] Error code:", target.error.code);
                 console.error("[useRoom] Error message:", target.error.message);
 
-                // Intentar recuperar la reproducción
                 if (playbackState === "playing" && currentTrackId) {
                     console.log("[useRoom] Intentando recuperar reproducción tras error");
                     setTimeout(async () => {
@@ -565,7 +716,6 @@ function useRoom(roomId: string) {
         };
     }, [playbackState, currentTrackId, ensureStreamUrlForTrack, loadAndPlayTrack]);
 
-    // ------------------ emitir eventos de control ------------------
 
     const changeTrackFromExternalStream = useCallback(
         async (opts: { trackId: string; streamUrl: string }) => {
@@ -582,7 +732,6 @@ function useRoom(roomId: string) {
 
             console.log("[useRoom] 🎵 Cambiando track manualmente:", trackId);
 
-            // cache local
             streamUrlCacheRef.current.set(trackId, streamUrl);
 
             await loadAndPlayTrack(trackId, streamUrl, true);
@@ -590,7 +739,6 @@ function useRoom(roomId: string) {
             hasUserInteractedRef.current = true;
             setHasUserInteracted(true);
 
-            // Emitir al servidor para sincronizar con todos
             socket.emit("changeTrack", {
                 roomId,
                 trackId,
@@ -762,7 +910,6 @@ function useRoom(roomId: string) {
         });
     }, [roomId, socketStatus, user]);
 
-    // 🆕 forcePlay mejorado
     const forcePlay = useCallback(async () => {
         const audio = audioRef.current;
         if (!audio) {
@@ -770,14 +917,12 @@ function useRoom(roomId: string) {
             return false;
         }
 
-        // Si estamos cargando un track, esperar
         if (isLoadingTrackRef.current) {
             console.log('[useRoom] forcePlay: esperando carga de track');
             await new Promise(resolve => setTimeout(resolve, 500));
         }
 
         try {
-            // Si hay un track cargado y pausado, reproducir
             if (audio.src && audio.paused) {
                 await audio.play();
                 console.log('[useRoom] ✓ Reproducción forzada exitosa');
@@ -785,7 +930,6 @@ function useRoom(roomId: string) {
                 setHasUserInteracted(true);
                 setPlaybackState("playing");
 
-                // Notificar al servidor
                 emitPlayPause(true);
 
                 return true;
@@ -793,7 +937,7 @@ function useRoom(roomId: string) {
 
             console.warn('[useRoom] forcePlay: no hay track para reproducir');
             return false;
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('[useRoom] ✗ Error en forcePlay:', err);
             return false;
         }
@@ -806,7 +950,7 @@ function useRoom(roomId: string) {
         socketStatus,
         audioRef,
         playbackState,
-        currentTrackId, // ID lógico Audius
+        currentTrackId,
         hasUserInteracted,
         changeTrackFromExternalStream,
         emitPlayPause,
@@ -816,6 +960,5 @@ function useRoom(roomId: string) {
     };
 }
 
-// 👈 Export por defecto y nombrado, para que cualquier import funcione
 export default useRoom;
 export { useRoom };
