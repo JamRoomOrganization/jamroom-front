@@ -70,6 +70,9 @@ function useRoom(roomId: string) {
     // 🆕 Ref para almacenar latencia estimada
     const estimatedLatencyRef = useRef<number>(0);
 
+    // 🆕 Ref para trackear seeks locales (optimización de sincronización)
+    const lastSeekTimeRef = useRef<number>(0);
+
 
     const getAccessToken = useCallback(() => {
         if (typeof window === "undefined") return null;
@@ -573,6 +576,13 @@ function useRoom(roomId: string) {
                 return;
             }
 
+            // 🔧 Ignorar syncPacket si acabamos de hacer seek local (ventana de 2s)
+            const timeSinceLastSeek = Date.now() - lastSeekTimeRef.current;
+            if (timeSinceLastSeek < 2000) {
+                console.log("[useRoom] Ignorando syncPacket: seek reciente", timeSinceLastSeek, "ms");
+                return;
+            }
+
             const { trackId, playbackState: newPlaybackState, positionMs, serverTimeMs } = pkt;
             const last = lastSyncStateRef.current;
 
@@ -623,13 +633,25 @@ function useRoom(roomId: string) {
                 await loadAndPlayTrack(trackId, streamUrl, shouldPlay, adjustedPositionMs);
                 initialSyncRef.current = true;
             }
+            // 🔧 Aplicar corrección de drift solo si NO hay seek reciente
             else if (!trackChanged && typeof adjustedPositionMs === "number" && !isInitialSync) {
                 const targetPos = adjustedPositionMs / 1000;
                 const currentPos = audio.currentTime;
                 const diff = Math.abs(targetPos - currentPos);
 
+                // 🔧 Ignorar correcciones pequeñas si hay seek muy reciente
+                if (timeSinceLastSeek < 3000 && diff < 3) {
+                    console.log("[useRoom] Ignorando corrección de drift: seek reciente");
+                    return;
+                }
+
+                // Aplicar corrección solo si el drift es significativo
                 if (diff > 1.5) {
-                    console.log("[useRoom] ⏭ Ajustando posición:", targetPos);
+                    console.log("[useRoom] Corrigiendo drift detectado:", {
+                        target: targetPos,
+                        current: currentPos,
+                        diff,
+                    });
                     audio.currentTime = targetPos;
                 }
             }
@@ -676,6 +698,8 @@ function useRoom(roomId: string) {
             audioInitializedRef.current = false;
             isLoadingTrackRef.current = false;
             pendingPlaybackRef.current = null;
+            lastSeekTimeRef.current = 0; // 🔧 Reset seek timestamp
+            estimatedLatencyRef.current = 0; // 🔧 Reset latency estimation
         };
     }, [roomId, user, getAccessToken, measureRTT, ensureStreamUrlForTrack, loadAndPlayTrack]);
 
@@ -761,12 +785,14 @@ function useRoom(roomId: string) {
 
             const now = Date.now();
             const commandType = nextIsPlaying ? "play" : "pause";
+
+            // 🔧 Reducir throttling de 200ms → 300ms para mejor responsividad
             if (
                 lastCommandRef.current.type === commandType &&
                 lastCommandRef.current.timestamp &&
-                now - lastCommandRef.current.timestamp < 200
+                now - lastCommandRef.current.timestamp < 300
             ) {
-                console.warn("[useRoom] Comando duplicado ignorado:", commandType);
+                console.log("[useRoom] Comando ignorado: throttling activo");
                 return;
             }
 
@@ -804,6 +830,14 @@ function useRoom(roomId: string) {
 
                 const positionMs = Math.floor(validPos * 1000);
 
+                // 🔧 Aplicar cambio localmente INMEDIATAMENTE (optimistic update)
+                setPlaybackState("playing");
+                if (audio && audio.paused) {
+                    audio.play().catch((err) => {
+                        console.error("[useRoom] Error al reproducir:", err);
+                    });
+                }
+
                 console.log("[useRoom] Emitiendo play:", {
                     positionMs,
                     currentPos,
@@ -827,6 +861,12 @@ function useRoom(roomId: string) {
 
                 const validPos = Math.max(0, Math.min(currentPos, duration));
                 const positionMs = Math.floor(validPos * 1000);
+
+                // 🔧 Aplicar cambio localmente INMEDIATAMENTE (optimistic update)
+                setPlaybackState("paused");
+                if (audio && !audio.paused) {
+                    audio.pause();
+                }
 
                 console.log("[useRoom] Emitiendo pause:", {
                     positionMs,
@@ -865,6 +905,9 @@ function useRoom(roomId: string) {
             if (audio) {
                 audio.currentTime = positionSeconds;
             }
+
+            // 🔧 Marcar timestamp de seek local para prevenir que syncPacket sobrescriba
+            lastSeekTimeRef.current = Date.now();
 
             if (seekTimeoutRef.current) {
                 clearTimeout(seekTimeoutRef.current);
