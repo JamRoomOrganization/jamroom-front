@@ -6,7 +6,9 @@
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "jest",
+    "test:ci": "jest --runInBand --ci --coverage"
   },
   "dependencies": {
     "lucide-react": "^0.554.0",
