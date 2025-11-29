@@ -93,32 +93,47 @@ function useRoom(roomId: string) {
     }, []);
 
     // play() seguro: sincroniza estado de UI con el resultado real
-    const safePlay = useCallback(async (audio: HTMLAudioElement): Promise<boolean> => {
-        try {
-            await audio.play();
+    const safePlay = useCallback(
+        async (audio: HTMLAudioElement): Promise<boolean> => {
+            try {
+                await audio.play();
 
-            if (!audio.paused) {
-                setPlaybackState("playing");
-                hasUserInteractedRef.current = true;
-                setHasUserInteracted(true);
-                return true;
+                if (!audio.paused) {
+                    // Reproducción efectiva
+                    hasUserInteractedRef.current = true;
+                    setHasUserInteracted(true);
+                    setPlaybackState("playing");
+                    return true;
+                }
+
+                console.warn(
+                    "[useRoom] audio.play() completó pero audio.paused === true"
+                );
+                // No tocamos playbackState aquí; dejamos que lo marque el servidor
+                return false;
+            } catch (err: unknown) {
+                const error = err as Error;
+                console.error(
+                    "[useRoom] Error en audio.play():",
+                    error.name,
+                    error.message
+                );
+
+                if (error.name === "NotAllowedError") {
+                    // Autoplay bloqueado: mantenemos el estado 'playing' que viene del servidor
+                    // para que la UI muestre el banner de interacción.
+                    hasUserInteractedRef.current = false;
+                    setHasUserInteracted(false);
+                } else {
+                    // Otros errores sí justifican marcar pausa
+                    setPlaybackState("paused");
+                }
+
+                return false;
             }
-
-            console.warn("[useRoom] audio.play() completó pero audio.paused === true");
-            setPlaybackState("paused");
-            return false;
-        } catch (err: unknown) {
-            const error = err as Error;
-            console.error("[useRoom] Error en audio.play():", error.name, error.message);
-            setPlaybackState("paused");
-
-            if (error.name === "NotAllowedError") {
-                setHasUserInteracted(false);
-            }
-
-            return false;
-        }
-    }, []);
+        },
+        []
+    );
 
     const ensureStreamUrlForTrack = useCallback(
         async (trackId: string): Promise<string | null> => {
@@ -467,7 +482,9 @@ function useRoom(roomId: string) {
                             console.error("[useRoom] Error en prebuffer optimista:", err);
                         });
                 } else {
-                    console.log("[useRoom] Estado guardado expirado o inválido, ignorando");
+                    console.log(
+                        "[useRoom] Estado guardado expirado o inválido, ignorando"
+                    );
                     localStorage.removeItem(STORAGE_KEY);
                 }
             } catch (err) {
@@ -545,7 +562,11 @@ function useRoom(roomId: string) {
                 try {
                     const latency = await measureRTT(socket);
                     estimatedLatencyRef.current = latency;
-                    console.log("[useRoom] Latencia estimada (post-join):", latency, "ms");
+                    console.log(
+                        "[useRoom] Latencia estimada (post-join):",
+                        latency,
+                        "ms"
+                    );
                 } catch (err) {
                     console.warn("[useRoom] Error midiendo latencia:", err);
                     estimatedLatencyRef.current = 0;
@@ -607,7 +628,9 @@ function useRoom(roomId: string) {
 
                 // Si es respuesta a mi propio comando, ya hice optimistic update → ignorar
                 if (lastAction.timestamp === pkt.originalClientTimestamp) {
-                    console.log("[useRoom] Ignorando fastSync: es ACK de mi propio comando");
+                    console.log(
+                        "[useRoom] Ignorando fastSync: es ACK de mi propio comando"
+                    );
                     return;
                 }
 
@@ -661,26 +684,37 @@ function useRoom(roomId: string) {
                 } = pkt;
 
                 if (pkt.serverProcessingMs !== undefined) {
-                    console.log("[useRoom] 📊 Métricas del servidor (fastSync nuevo usuario):", {
-                        serverProcessing: pkt.serverProcessingMs,
-                        networkLatency,
-                        total: pkt.serverProcessingMs + networkLatency,
-                    });
+                    console.log(
+                        "[useRoom] 📊 Métricas del servidor (fastSync nuevo usuario):",
+                        {
+                            serverProcessing: pkt.serverProcessingMs,
+                            networkLatency,
+                            total: pkt.serverProcessingMs + networkLatency,
+                        }
+                    );
+                }
+
+                // Reflejar playbackState del servidor (playing/paused)
+                if (serverPlaybackState) {
+                    setPlaybackState(serverPlaybackState);
                 }
 
                 // Guardar en cache y reusar si initialSync llega después
-                streamUrlCacheRef.current.set(trackId, streamUrl);
+                streamUrlCacheRef.current.set(trackId!, streamUrl);
 
                 // Compensar latencia total
                 const clientReceiveTime = Date.now();
                 const totalLatency = clientReceiveTime - serverTimeMs;
                 const adjustedPositionMs = positionMs + totalLatency;
 
-                console.log("[useRoom] Compensación de latencia fastSync (nuevo usuario):", {
-                    original: positionMs,
-                    adjusted: adjustedPositionMs,
-                    latency: totalLatency,
-                });
+                console.log(
+                    "[useRoom] Compensación de latencia fastSync (nuevo usuario):",
+                    {
+                        original: positionMs,
+                        adjusted: adjustedPositionMs,
+                        latency: totalLatency,
+                    }
+                );
 
                 // Si ya tenemos audio inicializado con el mismo track, solo ajustar
                 if (audioInitializedRef.current && currentTrackId === trackId) {
@@ -707,7 +741,7 @@ function useRoom(roomId: string) {
                     // Cargar + reproducir usando el streamUrl ya resuelto
                     const shouldPlay = serverPlaybackState === "playing";
                     await loadAndPlayTrack(
-                        trackId,
+                        trackId!,
                         streamUrl,
                         shouldPlay,
                         adjustedPositionMs
@@ -726,7 +760,9 @@ function useRoom(roomId: string) {
                 return;
             }
 
-            console.warn("[useRoom] fastSync en formato no reconocido, ignorando");
+            console.warn(
+                "[useRoom] fastSync en formato no reconocido, ignorando"
+            );
         });
 
         // initialSync: snapshot inicial de estado de sala
@@ -748,7 +784,11 @@ function useRoom(roomId: string) {
             } = pkt;
 
             if (serverProcessingMs !== undefined) {
-                console.log("[useRoom] Servidor procesó initialSync en:", serverProcessingMs, "ms");
+                console.log(
+                    "[useRoom] Servidor procesó initialSync en:",
+                    serverProcessingMs,
+                    "ms"
+                );
             }
 
             if (!trackId) {
@@ -756,8 +796,17 @@ function useRoom(roomId: string) {
                 return;
             }
 
+            // Reflejar playbackState del servidor desde el principio
+            if (newPlaybackState) {
+                setPlaybackState(newPlaybackState);
+            }
+
             // Si fastSync ya inicializó este track, solo ajustar (evita doble load)
-            if (initialSyncRef.current && audioInitializedRef.current && currentTrackId === trackId) {
+            if (
+                initialSyncRef.current &&
+                audioInitializedRef.current &&
+                currentTrackId === trackId
+            ) {
                 const latency = estimatedLatencyRef.current;
                 const compensatedServerTime = (serverTimeMs || Date.now()) + latency;
                 const localTime = Date.now();
@@ -768,11 +817,14 @@ function useRoom(roomId: string) {
                 const diff = Math.abs(audio.currentTime - targetPos);
 
                 if (diff > 0.5) {
-                    console.log("[useRoom] Ajustando posición tras initialSync (ya inicializado):", {
-                        targetPos,
-                        currentPos: audio.currentTime,
-                        diff,
-                    });
+                    console.log(
+                        "[useRoom] Ajustando posición tras initialSync (ya inicializado):",
+                        {
+                            targetPos,
+                            currentPos: audio.currentTime,
+                            diff,
+                        }
+                    );
                     audio.currentTime = targetPos;
                 }
 
@@ -808,7 +860,9 @@ function useRoom(roomId: string) {
                 streamUrl = await ensureStreamUrlForTrack(trackId);
             }
             if (!streamUrl) {
-                console.warn("[useRoom] No se pudo resolver streamUrl para initialSync");
+                console.warn(
+                    "[useRoom] No se pudo resolver streamUrl para initialSync"
+                );
                 return;
             }
 
@@ -822,7 +876,13 @@ function useRoom(roomId: string) {
         // Evento prebuffer (si backend lo utiliza)
         socket.on(
             "prebuffer",
-            async ({ trackId, estimatedStartMs }: { trackId: string; estimatedStartMs: number }) => {
+            async ({
+                       trackId,
+                       estimatedStartMs,
+                   }: {
+                trackId: string;
+                estimatedStartMs: number;
+            }) => {
                 const audio = audioRef.current;
                 if (!audio) return;
 
@@ -867,7 +927,10 @@ function useRoom(roomId: string) {
                         audio.load();
                     });
 
-                    if (estimatedStartMs !== undefined && estimatedStartMs !== null) {
+                    if (
+                        estimatedStartMs !== undefined &&
+                        estimatedStartMs !== null
+                    ) {
                         audio.currentTime = estimatedStartMs / 1000;
                     }
 
@@ -934,6 +997,11 @@ function useRoom(roomId: string) {
 
             const trackChanged = !!trackId && trackId !== last.trackId;
             const isInitialSync = !initialSyncRef.current;
+
+            // Reflejar playbackState del servidor
+            if (newPlaybackState) {
+                setPlaybackState(newPlaybackState);
+            }
 
             const latency = estimatedLatencyRef.current;
             const compensatedServerTime = (serverTimeMs || Date.now()) + latency;
@@ -1025,7 +1093,7 @@ function useRoom(roomId: string) {
                 } else if (newPlaybackState === "paused" && !audio.paused) {
                     console.log("[useRoom] ⏸ Pausando desde syncPacket");
                     audio.pause();
-                    setPlaybackState("paused");
+                    // ya hemos hecho setPlaybackState(newPlaybackState) arriba
                 }
             }
 
