@@ -34,7 +34,7 @@ const ParticipantsList = React.memo(function ParticipantsList({
   const [selectedMember, setSelectedMember] = useState<RoomMember | null>(null);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
 
-  // Para controlar qué menú kebab está abierto
+  // Controla qué menú kebab está abierto
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
 
   const getDisplayName = (member: RoomMember) => {
@@ -46,7 +46,7 @@ const ParticipantsList = React.memo(function ParticipantsList({
     );
   };
 
-  const displayMembers =
+  const displayMembers: RoomMember[] =
     members.length > 0
       ? members
       : participants.map((p) => ({
@@ -63,14 +63,31 @@ const ParticipantsList = React.memo(function ParticipantsList({
           updated_at: "",
         }));
 
-  return (
-    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50">
-      <h4 className="text-white font-semibold mb-3">Participantes</h4>
+  const totalParticipants = displayMembers.length;
 
-      {displayMembers.length === 0 ? (
+  const toggleMenuFor = (memberId: string) => {
+    setOpenMenuFor((current) => (current === memberId ? null : memberId));
+  };
+
+  const closeMenu = () => setOpenMenuFor(null);
+
+  return (
+    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-slate-700/50">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h4 className="text-white font-semibold text-sm sm:text-base">
+          Participantes
+        </h4>
+        {totalParticipants > 0 && (
+          <span className="inline-flex items-center px-2 py-0.5 text-xs text-slate-300 bg-slate-900/60 border border-slate-700/70 rounded-full">
+            {totalParticipants}
+          </span>
+        )}
+      </div>
+
+      {totalParticipants === 0 ? (
         <div className="text-slate-400 text-sm">Aún no hay participantes.</div>
       ) : (
-        <ul className="space-y-3">
+        <ul className="space-y-3 max-h-72 overflow-y-auto pr-1">
           {displayMembers.map((member) => {
             const isHostMember = member.roles?.includes("host");
             const isMenuOpen = openMenuFor === member.user_id;
@@ -90,23 +107,21 @@ const ParticipantsList = React.memo(function ParticipantsList({
                   {initials(getDisplayName(member))}
                 </div>
 
-                {/* Contenedor principal: info a la izquierda, menú de acciones a la derecha */}
+                {/* Contenedor principal: info a la izquierda, menú a la derecha */}
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                    {/* Bloque de info: nombre + rol + puntos de permisos */}
+                    {/* Info: nombre + rol + puntos */}
                     <div className="min-w-0">
-                      {/* Nombre */}
                       <div className="text-sm text-slate-100 truncate">
                         {getDisplayName(member)}
                       </div>
 
-                      {/* Rol + indicadores de permisos como puntos de color */}
                       <div className="mt-0.5 text-xs text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="font-medium">
                           {isHostMember ? "Host" : "Miembro"}
                         </span>
 
-                        {/* Solo mostramos puntos para miembros (no host) y si tienen algún permiso */}
+                        {/* Puntos de permisos (solo miembros, no host) */}
                         {!isHostMember && hasAnyPermission && (
                           <div className="flex items-center gap-1">
                             {member.can_add_tracks && (
@@ -135,56 +150,61 @@ const ParticipantsList = React.memo(function ParticipantsList({
                       </div>
                     </div>
 
-                    {/* Menú kebab de acciones para el host (solo en miembros, no en host) */}
-                    {isHost && !isHostMember && (onUpdatePermissions || onRemoveMember) && (
-                      <div className="relative flex-shrink-0 mt-1 sm:mt-0">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setOpenMenuFor((current) =>
-                              current === member.user_id ? null : member.user_id
-                            )
-                          }
-                          className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-900/60 border border-slate-600/70 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-sm"
-                          aria-label="Acciones sobre este participante"
-                          title="Más acciones"
-                        >
-                          ⋯
-                        </button>
-
-                        {isMenuOpen && (
-                          <div
-                            className="absolute top-0 left-full ml-2 w-40 rounded-md bg-slate-900 border border-slate-700 shadow-lg py-1 z-20"
+                    {/* Menú kebab para host (no se muestra en el host) */}
+                    {isHost &&
+                      !isHostMember &&
+                      (onUpdatePermissions || onRemoveMember) && (
+                        <div className="relative flex-shrink-0 mt-1 sm:mt-0">
+                          <button
+                            type="button"
+                            onClick={() => toggleMenuFor(member.user_id)}
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-900/60 border border-slate-600/70 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-sm"
+                            aria-label="Acciones sobre este participante"
+                            title="Más acciones"
                           >
-                            {onUpdatePermissions && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedMember(member);
-                                  setShowPermissionsModal(true);
-                                  setOpenMenuFor(null);
-                                }}
-                                className="w-full text-left px-3 py-1.5 text-xs text-slate-100 hover:bg-slate-800 transition-colors"
-                              >
-                                Editar permisos
-                              </button>
-                            )}
-                            {onRemoveMember && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onRemoveMember(member.user_id, getDisplayName(member));
-                                  setOpenMenuFor(null);
-                                }}
-                                className="w-full text-left px-3 py-1.5 text-xs text-red-300 hover:bg-slate-800 transition-colors"
-                              >
-                                Eliminar miembro
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                            ⋯
+                          </button>
+
+                          {isMenuOpen && (
+                            <div
+                              className={`
+                                absolute z-20 w-44 rounded-md bg-slate-900 border border-slate-700 shadow-lg py-1
+                                right-0 top-full mt-2
+                                sm:mt-0 sm:top-0 sm:left-full sm:right-auto sm:ml-2
+                              `}
+                            >
+                              {onUpdatePermissions && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedMember(member);
+                                    setShowPermissionsModal(true);
+                                    closeMenu();
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 text-xs text-slate-100 hover:bg-slate-800 transition-colors"
+                                >
+                                  Editar permisos
+                                </button>
+                              )}
+                              {onRemoveMember && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onRemoveMember(
+                                      member.user_id,
+                                      getDisplayName(member)
+                                    );
+                                    closeMenu();
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 text-xs text-red-300 hover:bg-slate-800 transition-colors"
+                                >
+                                  Eliminar miembro
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                   </div>
                 </div>
               </li>
@@ -209,6 +229,7 @@ const ParticipantsList = React.memo(function ParticipantsList({
 });
 
 export default ParticipantsList;
+
 
 
 

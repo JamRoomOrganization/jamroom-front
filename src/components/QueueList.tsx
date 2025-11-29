@@ -31,12 +31,14 @@ const QueueList = React.memo(function QueueList({
   onSelectTrack?: (trackId: string) => void;
 }) {
   return (
-    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-bold text-white">Cola de Reproducción</h3>
+    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-slate-700/50">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <h3 className="text-lg sm:text-xl font-bold text-white">
+          Cola de Reproducción
+        </h3>
         <button
           onClick={onAddClick}
-          className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 text-sm transition border border-purple-500/30"
+          className="w-full sm:w-auto px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 text-sm transition border border-purple-500/30"
         >
           + Añadir
         </button>
@@ -50,21 +52,23 @@ const QueueList = React.memo(function QueueList({
       ) : (
         <div className="space-y-2">
           {queue.map((track, index) => (
-              <div
-                  key={`${track.id}-${index}`}   // 👈 ANTES: key={track.id}
-                  onClick={() => onSelectTrack?.(track.id)}
-                  className={`
-      p-3 rounded-lg cursor-pointer transition-all
-      ${currentTrack?.id === track.id
-                      ? 'bg-purple-500/20 border-2 border-purple-500/50 shadow-lg shadow-purple-500/20'
-                      : 'bg-slate-800/50 hover:bg-slate-700/50 border-2 border-slate-700/50 hover:border-slate-600/50'
-                  }
-    `}
-              >
+            <div
+              key={`${track.id}-${index}`}
+              onClick={() => onSelectTrack?.(track.id)}
+              className={`p-3 rounded-lg cursor-pointer transition-all ${
+                currentTrack?.id === track.id
+                  ? "bg-purple-500/20 border-2 border-purple-500/50 shadow-lg shadow-purple-500/20"
+                  : "bg-slate-800/50 hover:bg-slate-700/50 border-2 border-slate-700/50 hover:border-slate-600/50"
+              }`}
+            >
               <div className="flex items-center gap-3">
-                <span className={`text-sm font-medium w-6 ${
-                  currentTrack?.id === track.id ? 'text-purple-400' : 'text-slate-400'
-                }`}>
+                <span
+                  className={`text-xs sm:text-sm font-medium w-6 ${
+                    currentTrack?.id === track.id
+                      ? "text-purple-400"
+                      : "text-slate-400"
+                  }`}
+                >
                   {index + 1}
                 </span>
 
@@ -73,24 +77,32 @@ const QueueList = React.memo(function QueueList({
                   <img
                     src={track.artworkUrl || track.cover_url}
                     alt={track.title}
-                    className="w-12 h-12 rounded object-cover"
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded object-cover flex-shrink-0"
                   />
                 )}
 
                 <div className="flex-1 min-w-0">
-                  <p className={`font-medium truncate ${
-                    currentTrack?.id === track.id ? 'text-white' : 'text-slate-200'
-                  }`}>
+                  <p
+                    className={`font-medium truncate ${
+                      currentTrack?.id === track.id
+                        ? "text-white"
+                        : "text-slate-200"
+                    }`}
+                  >
                     {track.title}
                   </p>
                   {track.artist && (
-                    <p className="text-slate-400 text-sm truncate">{track.artist}</p>
+                    <p className="text-slate-400 text-xs sm:text-sm truncate">
+                      {track.artist}
+                    </p>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 ml-2">
                   {track.duration && (
-                    <span className="text-slate-400 text-xs">{fmt(track.duration)}</span>
+                    <span className="text-slate-400 text-xs">
+                      {fmt(track.duration)}
+                    </span>
                   )}
                   {currentTrack?.id === track.id && (
                     <div className="text-purple-400 animate-pulse">
