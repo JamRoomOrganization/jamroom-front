@@ -107,11 +107,12 @@ function useRoom(roomId: string) {
             console.warn("[useRoom] audio.play() completó pero audio.paused === true");
             setPlaybackState("paused");
             return false;
-        } catch (err: never) {
-            console.error("[useRoom] Error en audio.play():", err.name, err.message);
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error("[useRoom] Error en audio.play():", error.name, error.message);
             setPlaybackState("paused");
 
-            if (err.name === "NotAllowedError") {
+            if (error.name === "NotAllowedError") {
                 setHasUserInteracted(false);
             }
 
@@ -271,22 +272,22 @@ function useRoom(roomId: string) {
                     console.log("[useRoom] Procesando estado pendiente:", pending);
 
                     const audio = audioRef.current;
-                    if (!audio) return;
+                    if (audio) {
+                        if (typeof pending.position === "number") {
+                            audio.currentTime = pending.position / 1000;
+                        }
 
-                    if (typeof pending.position === "number") {
-                        audio.currentTime = pending.position / 1000;
-                    }
-
-                    if (pending.state === "playing" && audio.paused) {
-                        safePlay(audio).catch((err) => {
-                            console.error(
-                                "[useRoom] Error reproduciendo estado pendiente:",
-                                err
-                            );
-                        });
-                    } else if (pending.state === "paused" && !audio.paused) {
-                        audio.pause();
-                        setPlaybackState("paused");
+                        if (pending.state === "playing" && audio.paused) {
+                            safePlay(audio).catch((err) => {
+                                console.error(
+                                    "[useRoom] Error reproduciendo estado pendiente:",
+                                    err
+                                );
+                            });
+                        } else if (pending.state === "paused" && !audio.paused) {
+                            audio.pause();
+                            setPlaybackState("paused");
+                        }
                     }
                 }
             }
@@ -486,6 +487,9 @@ function useRoom(roomId: string) {
 
         const accessToken = getAccessToken();
         const userId = user?.id || user?.email || "anon";
+
+        // Capturar el ref al inicio del efecto para usarlo en el cleanup
+        const streamUrlCache = streamUrlCacheRef.current;
 
         setSocketStatus("connecting");
 
@@ -863,7 +867,7 @@ function useRoom(roomId: string) {
                         audio.load();
                     });
 
-                    if (typeof estimatedStartMs === "number") {
+                    if (estimatedStartMs !== undefined && estimatedStartMs !== null) {
                         audio.currentTime = estimatedStartMs / 1000;
                     }
 
@@ -988,7 +992,7 @@ function useRoom(roomId: string) {
                 initialSyncRef.current = true;
             } else if (
                 !trackChanged &&
-                typeof adjustedPositionMs === "number" &&
+                adjustedPositionMs !== undefined &&
                 !isInitialSync
             ) {
                 const targetPos = adjustedPositionMs / 1000;
@@ -1041,7 +1045,7 @@ function useRoom(roomId: string) {
             lastSyncStateRef.current = {};
             setPlaybackState("paused");
             setCurrentTrackId(null);
-            streamUrlCacheRef.current.clear();
+            streamUrlCache.clear();
             initialSyncRef.current = false;
             audioInitializedRef.current = false;
             isLoadingTrackRef.current = false;
