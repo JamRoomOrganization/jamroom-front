@@ -107,7 +107,7 @@ function useRoom(roomId: string) {
             console.warn("[useRoom] audio.play() completó pero audio.paused === true");
             setPlaybackState("paused");
             return false;
-        } catch (err: any) {
+        } catch (err: never) {
             console.error("[useRoom] Error en audio.play():", err.name, err.message);
             setPlaybackState("paused");
 
