@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 
 export function useRoomActions(roomId?: string) {
   const router = useRouter();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { user } = useAuth();
 
   const deleteRoom = async () => {
@@ -22,7 +23,6 @@ export function useRoomActions(roomId?: string) {
   const leaveRoom = async () => {
     if (!roomId) return;
     try {
-      const response = await api.delete(`/api/rooms/${roomId}/members/me`, true);
       router.push('/');
     } catch (error) {
       console.error("[useRoomActions] Error leaving room:", error);

@@ -27,6 +27,7 @@ export function RoomsSection({
   // Cuando cambia el número de salas, resetear página si hace falta
   useEffect(() => {
     if (currentPage > totalPages) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentPage(1);
     }
   }, [currentPage, totalPages]);

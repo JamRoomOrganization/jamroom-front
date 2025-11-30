@@ -93,8 +93,7 @@ export function useRoomQueue(roomId: string): UseRoomQueueResult {
                                 const trackData = await trackResponse.json();
                                 trackMetadata = trackData?.data;
                             }
-                        } catch (err) {
-                            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                        } catch {
                             console.warn(`[useRoomQueue] No se pudo obtener metadata para ${item.track_id}`);
                         }
 

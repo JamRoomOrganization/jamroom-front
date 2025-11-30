@@ -133,7 +133,6 @@ export default function RoomPage() {
 
   const canAddTracks = isHost || !!currentMember?.can_add_tracks;
   const canControlPlayback = isHost || !!currentMember?.can_control_playback;
-  const canInvite = isHost || !!currentMember?.can_invite;
 
   // Confirm: abandonar sala
   const handleLeaveRoom = () => {

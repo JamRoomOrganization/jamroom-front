@@ -92,6 +92,7 @@ export function AudiusSearch({ onTrackSelected }: Props) {
                         className="flex w-full items-center gap-3 rounded border border-slate-700 bg-slate-800 px-2 py-1 text-left hover:bg-slate-700"
                     >
                         {track.artwork?.['150x150'] && (
+                            // eslint-disable-next-line @next/next/no-img-element
                             <img
                                 src={track.artwork['150x150']}
                                 alt={track.title}

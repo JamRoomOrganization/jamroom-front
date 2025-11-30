@@ -1,55 +1,68 @@
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import Header from "@/components/Header";
+import "@testing-library/jest-dom";
 
-// Mock del contexto de autenticación
+import Header from "./Header";
+
+// Mock de AuthContext
+const mockUseAuth = jest.fn();
+const mockSignOut = jest.fn();
+
 jest.mock("@/context/AuthContext", () => ({
-  useAuth: () => ({
-    user: { name: "Test User", email: "test@example.com" },
-    loading: false,
-    signOut: jest.fn(),
-  }),
+  useAuth: () => mockUseAuth(),
 }));
 
-// Mock de next/link para tests
-jest.mock("next/link", () => {
-  return ({ children, href }: { children: React.ReactNode; href: string }) => (
-    <a href={href}>{children}</a>
-  );
-});
+function renderHeader() {
+  return render(<Header />);
+}
 
 describe("Header", () => {
+  beforeEach(() => {
+    mockUseAuth.mockReset();
+    mockSignOut.mockReset();
+  });
+
   it("muestra el nombre de la app y el botón de crear sala", () => {
-    render(<Header />);
+    mockUseAuth.mockReturnValue({
+      user: null,
+      loading: false,
+      signOut: mockSignOut,
+    });
 
-    // Nombre de la app
+    renderHeader();
+
     expect(screen.getByText("JamRoom")).toBeInTheDocument();
-
-    // Botón crear sala
-    expect(screen.getByText("Crear sala")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /crear sala/i })
+    ).toBeInTheDocument();
   });
 
   it("muestra el saludo con el nombre del usuario cuando está logueado", () => {
-    render(<Header />);
-
-    expect(screen.getByText(/Hola, Test User/i)).toBeInTheDocument();
-  });
-
-  it("dispara signOut cuando se pulsa en 'Salir'", () => {
-    const signOutMock = jest.fn();
-
-    // Sobrescribimos temporalmente el mock para este test
-    (jest.mocked as any)(require("@/context/AuthContext")).useAuth = () => ({
-      user: { name: "Test User", email: "test@example.com" },
+    mockUseAuth.mockReturnValue({
+      user: { name: "Usuario de prueba", email: "test@example.com" },
       loading: false,
-      signOut: signOutMock,
+      signOut: mockSignOut,
     });
 
-    render(<Header />);
+    renderHeader();
 
-    const salirButton = screen.getByText("Salir");
-    fireEvent.click(salirButton);
+    expect(
+      screen.getByText(/hola, usuario de prueba/i)
+    ).toBeInTheDocument();
+  });
 
-    expect(signOutMock).toHaveBeenCalled();
+  it('dispara signOut cuando se pulsa en "Salir"', () => {
+    mockUseAuth.mockReturnValue({
+      user: { name: "Usuario de prueba", email: "test@example.com" },
+      loading: false,
+      signOut: mockSignOut,
+    });
+
+    renderHeader();
+
+    fireEvent.click(screen.getByRole("button", { name: /salir/i }));
+
+    expect(mockSignOut).toHaveBeenCalled();
   });
 });
+

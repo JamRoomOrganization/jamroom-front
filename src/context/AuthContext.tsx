@@ -45,6 +45,7 @@ function parseJwt(token: string): any {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const SKIP_AUTH = process.env.NEXT_PUBLIC_SKIP_AUTH === 'true';
 
   const [user, setUser] = useState<AuthUser | null>(null);
