@@ -77,10 +77,11 @@ const PlayerNow = React.memo(function PlayerNow({
         };
     }, []);
 
-    // Mantener duración sincronizada con la pista actual
+    // Reset de posición y duración cuando cambia de pista
     React.useEffect(() => {
+        setPos(0);
         setTotal(track?.duration ?? DEFAULT_DURATION);
-    }, [track?.duration]);
+    }, [track?.id, track?.duration]);
 
     const pct = Math.min(100, (pos / Math.max(total, 1)) * 100);
     const controlsDisabled = !canControlPlayback || !track;
@@ -116,18 +117,37 @@ const PlayerNow = React.memo(function PlayerNow({
         onSkipClick?.();
     };
 
-    const handleStalled = (e: React.SyntheticEvent<HTMLAudioElement>) => {
-        const audio = e.currentTarget;
+    const handleStalled = async (e: React.SyntheticEvent<HTMLAudioElement>) => {
         console.warn("[PlayerNow] Audio detenido (stalled), intentando reanudar");
-        if (!audio.paused && isPlaying) {
-            audio.load();
-            audio
-                .play()
-                .catch((err) => {
-                    console.error("[PlayerNow] Error al reanudar tras stalled:", err);
-                });
+
+        if (!isPlaying) return;
+
+        // Si el hook expone forcePlay, dejamos que él decida cómo reanudar
+        if (forcePlay) {
+            try {
+                const ok = await forcePlay();
+                if (!ok) {
+                    console.warn("[PlayerNow] forcePlay no pudo reanudar tras stalled");
+                }
+            } catch (err) {
+                console.error(
+                    "[PlayerNow] Error al ejecutar forcePlay tras stalled:",
+                    err
+                );
+            }
+            return;
+        }
+
+        // Fallback ultra simple si algún día usas PlayerNow sin hook
+        const audio = e.currentTarget;
+        if (audio.paused || !audio.src) return;
+        try {
+            await audio.play();
+        } catch (err) {
+            console.error("[PlayerNow] Error al reanudar tras stalled (fallback):", err);
         }
     };
+
 
     const handleWaiting = () => {
         console.log("[PlayerNow] Audio buffering...");
@@ -136,9 +156,7 @@ const PlayerNow = React.memo(function PlayerNow({
     // Play / pause – bloqueado si no tiene permiso
     const togglePlayPause = () => {
         if (!canControlPlayback) {
-            console.warn(
-                "[PlayerNow] Usuario sin permiso de control de reproducción"
-            );
+            console.warn("[PlayerNow] Usuario sin permiso de control de reproducción");
             return;
         }
 
@@ -181,7 +199,6 @@ const PlayerNow = React.memo(function PlayerNow({
         }
     };
 
-    // Saltar 10s – solo si tiene permiso
     const skipTime = (seconds: number) => {
         if (!canControlPlayback) {
             console.warn(
@@ -194,7 +211,13 @@ const PlayerNow = React.memo(function PlayerNow({
         if (!audio) return;
 
         const next = Math.max(0, Math.min(total, audio.currentTime + seconds));
-        audio.currentTime = next;
+
+        if (onSeek) {
+            // onSeek trabaja en segundos
+            onSeek(next);
+        } else {
+            audio.currentTime = next;
+        }
     };
 
     // Seek – solo si tiene permiso
@@ -276,7 +299,7 @@ const PlayerNow = React.memo(function PlayerNow({
                     className="mb-4 p-4 bg-gradient-to-r from-yellow-500/40 to-orange-500/40 border-2 border-yellow-400 rounded-xl text-white cursor-pointer hover:from-yellow-500/50 hover:to-orange-500/50 transition-all animate-pulse shadow-lg shadow-yellow-500/30"
                     onClick={async () => {
                         console.log(
-                            "[PlayerNow] Banner clickeado - reproducción inmediata"
+                            "[PlayerNow] Banner clickeado - intento de reproducción inmediata"
                         );
 
                         const audio = audioRef.current;
@@ -285,24 +308,32 @@ const PlayerNow = React.memo(function PlayerNow({
                             return;
                         }
 
+                        // Si tenemos forcePlay, delegamos toda la lógica al hook.
+                        if (forcePlay) {
+                            try {
+                                const ok = await forcePlay();
+                                if (!ok) {
+                                    console.warn(
+                                        "[PlayerNow] forcePlay no pudo iniciar la reproducción"
+                                    );
+                                }
+                            } catch (err) {
+                                console.error(
+                                    "[PlayerNow] Error al ejecutar forcePlay desde el banner:",
+                                    err
+                                );
+                            }
+                            return;
+                        }
+
+                        // Fallback: reproducir directo si no hay forcePlay (no debería ser el caso normal).
                         try {
                             await audio.play();
-                            console.log("[PlayerNow] ✓ Reproducción iniciada (sin delay)");
-
-                            if (forcePlay) {
-                                forcePlay().catch((err) => {
-                                    console.warn(
-                                        "[PlayerNow] Error en forcePlay (no crítico):",
-                                        err
-                                    );
-                                });
-                            }
-                        } catch (err: any) {
+                            console.log(
+                                "[PlayerNow] ✓ Reproducción iniciada directamente desde el banner"
+                            );
+                        } catch (err) {
                             console.error("[PlayerNow] Error al reproducir:", err);
-
-                            if (forcePlay && err.name === "NotAllowedError") {
-                                await forcePlay();
-                            }
                         }
                     }}
                 >
