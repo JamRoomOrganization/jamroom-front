@@ -111,7 +111,7 @@ const ParticipantsList = React.memo(function ParticipantsList({
       {totalParticipants === 0 ? (
         <div className="text-slate-400 text-sm">Aún no hay participantes.</div>
       ) : (
-        <ul className="space-y-3 max-h-72 overflow-y-auto pr-1">
+        <ul className="space-y-3">
           {displayMembers.map((member) => {
             const isHostMember = member.roles?.includes("host");
             const isMenuOpen = openMenuFor === member.user_id;

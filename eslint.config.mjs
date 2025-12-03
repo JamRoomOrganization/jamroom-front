@@ -15,9 +15,11 @@ const eslintConfig = defineConfig([
   ]),
 
   {
+    files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
     rules: {
-      // Para no bloquear el CI
-      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unsafe-function-type": "off",
+      "@typescript-eslint/no-require-imports": "off",
+      "prefer-const": "off",
     },
   },
 ]);
