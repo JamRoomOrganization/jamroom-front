@@ -265,17 +265,6 @@ export function useVoiceChat(
         }
     }, []);
 
-    // Helper para establecer un error estructurado
-    const setVoiceErrorFromCode = useCallback((
-        code: VoiceErrorCode,
-        message: string,
-        uiMessage: string,
-        retryable: boolean
-    ) => {
-        debugLog("setting voice error", { code, message, retryable });
-        setVoiceError({ code, message, uiMessage, retryable });
-    }, []);
-
     // Callback para limpiar el error manualmente
     const clearError = useCallback(() => {
         setVoiceError(NO_ERROR);

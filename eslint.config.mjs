@@ -15,10 +15,11 @@ const eslintConfig = defineConfig([
   ]),
 
   {
-    files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
+    files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}", "jest.setup.ts"],
     rules: {
       "@typescript-eslint/no-unsafe-function-type": "off",
       "@typescript-eslint/no-require-imports": "off",
+      "@typescript-eslint/no-explicit-any": "off",
       "prefer-const": "off",
     },
   },
