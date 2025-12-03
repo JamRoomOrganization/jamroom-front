@@ -11,6 +11,7 @@
     "test:ci": "jest --runInBand --ci --coverage"
   },
   "dependencies": {
+    "livekit-client": "^2.16.0",
     "lucide-react": "^0.554.0",
     "next": "^16.0.0",
     "react": "^19.2.0",

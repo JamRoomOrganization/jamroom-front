@@ -1646,6 +1646,8 @@ function useRoom(roomId: string) {
         emitSeek,
         emitSkip,
         forcePlay,
+        /** Socket instance for voice chat or other features (may be null) */
+        socket: socketRef.current,
     };
 }
 

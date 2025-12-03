@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { RoomMember } from "@/hooks/useRoomMembers";
 import { MemberPermissionsModal } from "./MemberPermissionsModal";
+import type { VoiceParticipant, VoiceRole } from "@/hooks/useVoiceChat";
 
 type ParticipantsListProps = {
   participants?: Array<{ id: string; name: string; role?: string }>;
@@ -13,6 +14,16 @@ type ParticipantsListProps = {
     permissions: any
   ) => Promise<void>;
   onRemoveMember?: (targetUserId: string, targetName: string) => void;
+  /** Lista de participantes en el chat de voz */
+  voiceParticipants?: VoiceParticipant[];
+  /** Rol del usuario actual en el chat de voz */
+  selfVoiceRole?: VoiceRole | null;
+  /** Callback para silenciar a un usuario desde el servidor */
+  onVoiceHostMute?: (targetUserId: string) => void;
+  /** Callback para quitar silencio a un usuario desde el servidor */
+  onVoiceHostUnmute?: (targetUserId: string) => void;
+  /** Callback para expulsar a un usuario del chat de voz */
+  onVoiceHostKick?: (targetUserId: string) => void;
 };
 
 function initials(name?: string) {
@@ -30,6 +41,11 @@ const ParticipantsList = React.memo(function ParticipantsList({
   isHost = false,
   onUpdatePermissions,
   onRemoveMember,
+  voiceParticipants = [],
+  selfVoiceRole = null,
+  onVoiceHostMute,
+  onVoiceHostUnmute,
+  onVoiceHostKick,
 }: ParticipantsListProps) {
   const [selectedMember, setSelectedMember] = useState<RoomMember | null>(null);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
@@ -71,6 +87,14 @@ const ParticipantsList = React.memo(function ParticipantsList({
 
   const closeMenu = () => setOpenMenuFor(null);
 
+  // Obtiene el participante de voz correspondiente a un miembro
+  const getVoiceParticipant = (userId: string): VoiceParticipant | undefined => {
+    return voiceParticipants.find((vp) => vp.userId === userId);
+  };
+
+  // Determina si el usuario actual puede moderar el chat de voz
+  const canModerateVoice = selfVoiceRole === "host" || selfVoiceRole === "cohost";
+
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-slate-700/50">
       <div className="flex items-center justify-between gap-2 mb-3">
@@ -97,13 +121,23 @@ const ParticipantsList = React.memo(function ParticipantsList({
               member.can_control_playback ||
               member.can_invite;
 
+            // Obtener info del participante de voz (si está en el canal de voz)
+            const voiceParticipant = getVoiceParticipant(member.user_id);
+            const isInVoice = !!voiceParticipant;
+            const isVoiceMuted = voiceParticipant?.muted ?? false;
+            const isServerMuted = voiceParticipant?.serverMuted ?? false;
+
             return (
               <li
                 key={member.user_id}
                 className="flex items-center gap-3 py-1.5"
               >
                 {/* Avatar */}
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-blue-400 flex items-center justify-center text-xs text-white border border-slate-700/50 flex-shrink-0">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs text-white border flex-shrink-0 ${
+                  isInVoice
+                    ? "bg-gradient-to-br from-purple-500 to-blue-500 border-purple-400/50"
+                    : "bg-gradient-to-br from-purple-400 to-blue-400 border-slate-700/50"
+                }`}>
                   {initials(getDisplayName(member))}
                 </div>
 
@@ -112,8 +146,46 @@ const ParticipantsList = React.memo(function ParticipantsList({
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                     {/* Info: nombre + rol + puntos */}
                     <div className="min-w-0">
-                      <div className="text-sm text-slate-100 truncate">
+                      <div className="text-sm text-slate-100 truncate flex items-center gap-1.5">
                         {getDisplayName(member)}
+                        {/* Indicador de voz */}
+                        {isInVoice && (
+                          <span
+                            className={`inline-flex items-center ${
+                              isServerMuted
+                                ? "text-orange-400"
+                                : isVoiceMuted
+                                  ? "text-slate-400"
+                                  : "text-emerald-400"
+                            }`}
+                            title={
+                              isServerMuted
+                                ? "Silenciado por el host"
+                                : isVoiceMuted
+                                  ? "Micrófono silenciado"
+                                  : "En el canal de voz"
+                            }
+                          >
+                            {isServerMuted ? (
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <rect x="14" y="1" width="8" height="6" rx="1" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v1a7 7 0 01-14 0v-1M12 19v4M8 23h8" />
+                                <line x1="8" y1="5" x2="16" y2="11" strokeWidth={2} />
+                              </svg>
+                            ) : isVoiceMuted ? (
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M1 1l22 22M9 9v2a3 3 0 005.12 2.12M15 9.34V5a3 3 0 00-5.94-.6" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23M12 19v4M8 23h8" />
+                              </svg>
+                            ) : (
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v1a7 7 0 01-14 0v-1M12 19v4M8 23h8" />
+                              </svg>
+                            )}
+                          </span>
+                        )}
                       </div>
 
                       <div className="mt-0.5 text-xs text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -153,7 +225,7 @@ const ParticipantsList = React.memo(function ParticipantsList({
                     {/* Menú kebab para host (no se muestra en el host) */}
                     {isHost &&
                       !isHostMember &&
-                      (onUpdatePermissions || onRemoveMember) && (
+                      (onUpdatePermissions || onRemoveMember || (canModerateVoice && isInVoice)) && (
                         <div className="relative flex-shrink-0 mt-1 sm:mt-0">
                           <button
                             type="button"
@@ -186,6 +258,77 @@ const ParticipantsList = React.memo(function ParticipantsList({
                                   Editar permisos
                                 </button>
                               )}
+                              
+                              {/* Opciones de moderación de voz */}
+                              {canModerateVoice && isInVoice && !voiceParticipant?.isSelf && (
+                                <>
+                                  {/* Separador si hay opciones anteriores */}
+                                  {onUpdatePermissions && (
+                                    <div className="h-px bg-slate-700 my-1" />
+                                  )}
+                                  
+                                  {/* Silenciar/Quitar silencio del servidor */}
+                                  {isServerMuted ? (
+                                    onVoiceHostUnmute && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          onVoiceHostUnmute(member.user_id);
+                                          closeMenu();
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 text-xs text-emerald-300 hover:bg-slate-800 transition-colors flex items-center gap-2"
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v1a7 7 0 01-14 0v-1M12 19v4M8 23h8" />
+                                        </svg>
+                                        Permitir hablar
+                                      </button>
+                                    )
+                                  ) : (
+                                    onVoiceHostMute && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          onVoiceHostMute(member.user_id);
+                                          closeMenu();
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 text-xs text-orange-300 hover:bg-slate-800 transition-colors flex items-center gap-2"
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M1 1l22 22M9 9v2a3 3 0 005.12 2.12M15 9.34V5a3 3 0 00-5.94-.6" />
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23M12 19v4M8 23h8" />
+                                        </svg>
+                                        Silenciar micrófono
+                                      </button>
+                                    )
+                                  )}
+                                  
+                                  {/* Expulsar del canal de voz */}
+                                  {onVoiceHostKick && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onVoiceHostKick(member.user_id);
+                                        closeMenu();
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 text-xs text-red-300 hover:bg-slate-800 transition-colors flex items-center gap-2"
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.68 13.31a16 16 0 003.41 2.6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7 2 2 0 011.72 2v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.42 19.42 0 01-3.33-2.67m-2.67-3.34a19.79 19.79 0 01-3.07-8.63A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91" />
+                                        <line x1="1" y1="1" x2="23" y2="23" />
+                                      </svg>
+                                      Expulsar del canal de voz
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                              
+                              {/* Separador antes de eliminar miembro */}
+                              {onRemoveMember && (canModerateVoice && isInVoice || onUpdatePermissions) && (
+                                <div className="h-px bg-slate-700 my-1" />
+                              )}
+                              
                               {onRemoveMember && (
                                 <button
                                   type="button"

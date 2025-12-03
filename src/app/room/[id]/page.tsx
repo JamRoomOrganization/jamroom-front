@@ -26,6 +26,10 @@ import { useRoomPlaybackControls } from "@/hooks/useRoomPlaybackControls";
 import { RoomLoadingState } from "@/components/RoomLoadingState";
 import { RoomErrorState } from "@/components/RoomErrorState";
 import { RoomHeader } from "@/components/RoomHeader";
+import { useVoiceChat } from "@/hooks/useVoiceChat";
+import { useVoiceMedia } from "@/hooks/useVoiceMedia";
+import { useLiveKitVoiceClient } from "@/hooks/useLiveKitVoiceClient";
+import { VoiceControls } from "@/components/VoiceControls";
 
 type RemoveMemberConfirmState = {
     isOpen: boolean;
@@ -110,7 +114,54 @@ export default function RoomPage() {
         currentTrackId,
         hasUserInteracted,
         forcePlay,
+        socket,
     } = useRoom(roomId);
+
+    // Feature flag para voice chat
+    const enableVoice = process.env.NEXT_PUBLIC_ENABLE_VOICE === "true";
+    // Feature flag para voice media
+    const enableVoiceMedia = process.env.NEXT_PUBLIC_ENABLE_VOICE_MEDIA === "true";
+
+    // Hook de voice chat (usa el socket compartido con useRoom)
+    const {
+        participants: voiceParticipants,
+        joined: voiceJoined,
+        muted: voiceMuted,
+        joining: voiceJoining,
+        error: voiceError,
+        voiceError: voiceErrorState,
+        joinVoice,
+        leaveVoice,
+        toggleMute,
+        clearError: clearVoiceError,
+    } = useVoiceChat(roomId, socket);
+
+    // Hook de voice media para acceso al micrófono
+    const {
+        localStream: voiceMediaStream,
+        mediaEnabled: voiceMediaEnabled,
+        permissionState: voiceMediaPermissionState,
+        error: voiceMediaError,
+        enableMedia: voiceEnableMedia,
+        disableMedia: voiceDisableMedia,
+    } = useVoiceMedia({ enabledFlag: enableVoiceMedia });
+
+    // Hook de LiveKit voice client para conexión SFU
+    const {
+        connected: livekitConnected,
+        connecting: livekitConnecting,
+        reconnecting: livekitReconnecting,
+        canPlaybackAudio: livekitCanPlaybackAudio,
+        error: livekitError,
+        livekitError: livekitErrorState,
+        retryConnection: livekitRetryConnection,
+        startAudio: livekitStartAudio,
+    } = useLiveKitVoiceClient({
+        roomId,
+        socket,
+        joined: voiceJoined,
+        mediaStream: voiceMediaStream,
+    });
 
     const {
         members,
@@ -146,7 +197,7 @@ export default function RoomPage() {
             showSuccessToast("Has abandonado la sala.");
         } catch (err) {
             console.error("Error leaving room:", err);
-            showErrorToast("Error al abandonar la sala. Inténtalo de nuevo.");
+            showErrorToast("Error al abandonar la sala. Inténtalo de nuevo."); 
         } finally {
             setIsLeaving(false);
             setLeaveConfirmOpen(false);
@@ -411,6 +462,33 @@ export default function RoomPage() {
                             isHost={isHost}
                             onUpdatePermissions={updateMemberPermissions}
                             onRemoveMember={handleRemoveMemberClick}
+                        />
+                        <VoiceControls
+                            participants={voiceParticipants}
+                            joined={voiceJoined}
+                            muted={voiceMuted}
+                            joining={voiceJoining}
+                            error={voiceError}
+                            voiceError={voiceErrorState}
+                            onJoin={joinVoice}
+                            onLeave={leaveVoice}
+                            onToggleMute={toggleMute}
+                            enableVoice={enableVoice}
+                            enableVoiceMedia={enableVoiceMedia}
+                            mediaEnabled={voiceMediaEnabled}
+                            mediaPermissionState={voiceMediaPermissionState}
+                            mediaError={voiceMediaError}
+                            onEnableMedia={voiceEnableMedia}
+                            onDisableMedia={voiceDisableMedia}
+                            livekitConnected={livekitConnected}
+                            livekitConnecting={livekitConnecting}
+                            livekitReconnecting={livekitReconnecting}
+                            livekitCanPlaybackAudio={livekitCanPlaybackAudio}
+                            livekitError={livekitError}
+                            livekitErrorState={livekitErrorState}
+                            onLivekitRetry={livekitRetryConnection}
+                            onLivekitStartAudio={livekitStartAudio}
+                            onClearError={clearVoiceError}
                         />
                         <ChatPanel />
                     </aside>
