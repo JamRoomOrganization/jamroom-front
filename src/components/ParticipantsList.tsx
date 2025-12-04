@@ -120,18 +120,24 @@ const ParticipantsList = React.memo(function ParticipantsList({
   }, []);
 
   useEffect(() => {
-    updatePortalCoords(portalMenuFor);
+    let raf = 0;
+    const scheduleUpdate = () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(() => updatePortalCoords(portalMenuFor));
+    };
 
-    const handler = () => updatePortalCoords(portalMenuFor);
+    scheduleUpdate();
+    const handler = () => scheduleUpdate();
     window.addEventListener("resize", handler);
     window.addEventListener("scroll", handler, true);
+
     return () => {
+      if (raf) window.cancelAnimationFrame(raf);
       window.removeEventListener("resize", handler);
       window.removeEventListener("scroll", handler, true);
     };
   }, [portalMenuFor, updatePortalCoords]);
 
-  // cierra portal si click fuera (pointerdown captura)
   useEffect(() => {
     if (!portalMenuFor) return;
     const handler = (e: PointerEvent) => {
