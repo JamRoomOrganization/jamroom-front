@@ -34,16 +34,63 @@ type UseRoomMembersResult = {
   isMember: boolean | null;
 };
 
+/**
+ * Compara dos arrays de miembros para detectar cambios reales.
+ * Retorna true si hay cambios significativos.
+ */
+function hasMembersChanged(prev: RoomMember[], next: RoomMember[]): boolean {
+  if (prev.length !== next.length) return true;
+  
+  const prevIds = new Set(prev.map(m => m.user_id));
+  const nextIds = new Set(next.map(m => m.user_id));
+  
+  // Verificar si hay nuevos miembros o miembros eliminados
+  for (const id of nextIds) {
+    if (!prevIds.has(id)) return true;
+  }
+  for (const id of prevIds) {
+    if (!nextIds.has(id)) return true;
+  }
+  
+  // Verificar cambios en roles o permisos
+  for (const nextMember of next) {
+    const prevMember = prev.find(m => m.user_id === nextMember.user_id);
+    if (!prevMember) return true;
+    
+    // Comparar roles
+    const prevRoles = (prevMember.roles || []).sort().join(',');
+    const nextRoles = (nextMember.roles || []).sort().join(',');
+    if (prevRoles !== nextRoles) return true;
+    
+    // Comparar permisos
+    if (
+      prevMember.can_add_tracks !== nextMember.can_add_tracks ||
+      prevMember.can_control_playback !== nextMember.can_control_playback ||
+      prevMember.can_invite !== nextMember.can_invite
+    ) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 export function useRoomMembers(roomId?: string): UseRoomMembersResult {
   const [members, setMembers] = React.useState<RoomMember[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [isMember, setIsMember] = React.useState<boolean | null>(null);
+  
+  // Ref para comparar miembros y evitar actualizaciones innecesarias
+  const membersRef = React.useRef<RoomMember[]>([]);
+  // Ref para evitar múltiples llamadas simultáneas
+  const isFetchingRef = React.useRef(false);
 
   const loadMembers = React.useCallback(async () => {
     if (!roomId) return;
-    setLoading(true);
-    setError(null);
+    if (isFetchingRef.current) return;
+    
+    isFetchingRef.current = true;
 
     try {
       const result = await api.get<RoomMember[]>(
@@ -51,14 +98,20 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
         true
       );
 
-      console.log("[useRoomMembers] /members response:", result);
-      console.log(
-        "[useRoomMembers] /members first member:",
-        result.data?.[0]
-      );
-
-      setMembers(result.data ?? []);
+      const newMembers = result.data ?? [];
+      
+      // Solo actualizar estado si hay cambios reales
+      if (hasMembersChanged(membersRef.current, newMembers)) {
+        console.log("[useRoomMembers] Cambios detectados en miembros:", {
+          prev: membersRef.current.length,
+          next: newMembers.length,
+        });
+        membersRef.current = newMembers;
+        setMembers(newMembers);
+      }
+      
       setIsMember(true);
+      setError(null);
     } catch (err: any) {
       console.error("[useRoomMembers] error", err);
 
@@ -78,11 +131,12 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
         lower.includes("not a member")
       ) {
         setIsMember(false);
-        // Opcionalmente vaciamos la lista
+        membersRef.current = [];
         setMembers([]);
       }
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
   }, [roomId]);
 
@@ -114,7 +168,7 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
     loadMembers();
   }, [roomId, loadMembers]);
 
-  // Polling periódico mientras siga siendo miembro
+  // Polling periódico mientras siga siendo miembro (aumentado a 10s para reducir carga)
   React.useEffect(() => {
     if (!roomId) return;
     if (isMember === false) {
@@ -124,14 +178,10 @@ export function useRoomMembers(roomId?: string): UseRoomMembersResult {
 
     const interval = setInterval(() => {
       loadMembers();
-    }, 5000); // 5 segundos
+    }, 10000); // 10 segundos (aumentado de 5s para reducir actualizaciones)
 
     return () => clearInterval(interval);
   }, [roomId, loadMembers, isMember]);
-
-  React.useEffect(() => {
-    console.log("[useRoomMembers] members state updated:", members);
-  }, [members]);
 
   return {
     members,

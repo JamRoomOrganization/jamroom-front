@@ -723,10 +723,10 @@ export function VoiceControls({
                             <button
                                 onClick={handleJoin}
                                 disabled={isJoining || isVoiceUnavailable}
-                                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-150 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
                                     isVoiceUnavailable
                                         ? "bg-slate-700 text-slate-400 cursor-not-allowed"
-                                        : "bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white"
+                                        : "bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-lg shadow-purple-500/20 hover:shadow-purple-500/30"
                                 }`}
                                 title={isVoiceUnavailable ? "El servicio de voz no está disponible" : undefined}
                             >
@@ -822,12 +822,12 @@ export function VoiceControls({
                         <button
                             onClick={onToggleMute}
                             disabled={serverMuted}
-                            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
+                            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-xl transition-all duration-150 active:scale-95 ${
                                 serverMuted
                                     ? "bg-orange-700/50 text-orange-300 cursor-not-allowed"
                                     : muted
-                                        ? "bg-slate-700/80 hover:bg-slate-600/80 text-slate-300"
-                                        : "bg-emerald-600/80 hover:bg-emerald-500/80 text-white"
+                                        ? "bg-slate-700/80 hover:bg-slate-600/80 text-slate-300 hover:text-white"
+                                        : "bg-emerald-600/80 hover:bg-emerald-500/80 text-white shadow-lg shadow-emerald-500/20"
                             }`}
                             title={
                                 serverMuted
@@ -849,7 +849,7 @@ export function VoiceControls({
                                 </>
                             ) : (
                                 <>
-                                    <MicIcon className="w-4 h-4" />
+                                    <MicIcon className="w-4 h-4 animate-pulse" />
                                     <span className="hidden sm:inline">Silenciar</span>
                                 </>
                             )}
@@ -858,7 +858,7 @@ export function VoiceControls({
                         {/* Botón Salir */}
                         <button
                             onClick={handleLeave}
-                            className="flex items-center justify-center gap-2 px-3 py-2 bg-red-600/80 hover:bg-red-500/80 text-white text-sm font-medium rounded-xl transition-all duration-200"
+                            className="flex items-center justify-center gap-2 px-3 py-2 bg-red-600/80 hover:bg-red-500/80 text-white text-sm font-medium rounded-xl transition-all duration-150 active:scale-95"
                             title="Salir del canal de voz"
                         >
                             <PhoneOffIcon className="w-4 h-4" />

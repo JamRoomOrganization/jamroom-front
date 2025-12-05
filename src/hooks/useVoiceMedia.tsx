@@ -127,6 +127,46 @@ function getPermissionStateFromError(error: unknown): PermissionState {
 }
 
 /**
+ * Constraints de audio de alta calidad para chat de voz.
+ * Optimizados para supresión de ruido ambiente y claridad de voz.
+ * Estas configuraciones priorizan la calidad y supresión de ruido.
+ */
+const OPTIMIZED_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+    // Cancelación de eco agresiva - crítico cuando hay música de fondo
+    echoCancellation: { ideal: true, exact: true },
+    // Supresión de ruido agresiva para eliminar ruido ambiente
+    noiseSuppression: { ideal: true, exact: true },
+    // Control automático de ganancia para normalizar volumen de voz
+    autoGainControl: { ideal: true, exact: true },
+    // Sample rate profesional (48kHz) para audio de alta calidad
+    sampleRate: { ideal: 48000, min: 44100 },
+    // Mono para voz (reduce ancho de banda, mejor procesamiento)
+    channelCount: { ideal: 1, max: 1 },
+};
+
+/**
+ * Constraints de audio de calidad media como fallback.
+ * Se usan si los constraints de alta calidad fallan.
+ */
+const MEDIUM_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+    echoCancellation: { ideal: true },
+    noiseSuppression: { ideal: true },
+    autoGainControl: { ideal: true },
+    sampleRate: { ideal: 44100 },
+    channelCount: { ideal: 1, max: 2 },
+};
+
+/**
+ * Constraints de audio básicos como fallback final.
+ * Se usan si los constraints medios también fallan.
+ */
+const BASIC_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+};
+
+/**
  * Hook para gestionar el acceso al micrófono del usuario.
  * 
  * Este hook maneja la captura de audio del usuario a través de getUserMedia,
@@ -205,12 +245,70 @@ export function useVoiceMedia(options?: UseVoiceMediaOptions): UseVoiceMediaResu
                 setError(null);
             }
 
-            debugLog("requesting microphone access");
+            debugLog("requesting microphone access with optimized constraints");
 
-            // Solicitar acceso al micrófono
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: true,
-            });
+            let stream: MediaStream;
+            let constraintsUsed = "optimized";
+
+            try {
+                // Intentar con constraints de alta calidad primero
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: OPTIMIZED_AUDIO_CONSTRAINTS,
+                });
+
+                debugLog("microphone access granted with optimized constraints", {
+                    trackCount: stream.getAudioTracks().length,
+                    constraints: "optimized",
+                });
+            } catch (constraintError) {
+                // Si fallan los constraints optimizados (OverconstrainedError),
+                // intentar con constraints de calidad media
+                if (
+                    constraintError instanceof DOMException &&
+                    constraintError.name === "OverconstrainedError"
+                ) {
+                    debugLog("optimized constraints failed, falling back to medium", {
+                        error: constraintError.message,
+                    });
+
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({
+                            audio: MEDIUM_AUDIO_CONSTRAINTS,
+                        });
+                        constraintsUsed = "medium";
+
+                        debugLog("microphone access granted with medium constraints", {
+                            trackCount: stream.getAudioTracks().length,
+                            constraints: "medium",
+                        });
+                    } catch (mediumError) {
+                        // Si también fallan los constraints medios, usar básicos
+                        if (
+                            mediumError instanceof DOMException &&
+                            mediumError.name === "OverconstrainedError"
+                        ) {
+                            debugLog("medium constraints failed, falling back to basic", {
+                                error: (mediumError as DOMException).message,
+                            });
+
+                            stream = await navigator.mediaDevices.getUserMedia({
+                                audio: BASIC_AUDIO_CONSTRAINTS,
+                            });
+                            constraintsUsed = "basic";
+
+                            debugLog("microphone access granted with basic constraints", {
+                                trackCount: stream.getAudioTracks().length,
+                                constraints: "basic",
+                            });
+                        } else {
+                            throw mediumError;
+                        }
+                    }
+                } else {
+                    // Si es otro tipo de error, propagarlo
+                    throw constraintError;
+                }
+            }
 
             // Verificar que el componente sigue montado
             if (!mountedRef.current) {
