@@ -41,11 +41,12 @@ jobs:
         run: npm run test:ci
 
       - name: Upload coverage artifact
-        # Sube el lcov para poder revisarlo aunque Sonar falle
-        uses: actions/upload-artifact@v3
+        # Usar v4 (no deprecado) y evitar fallos si no se encuentra el archivo
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-lcov
           path: coverage/lcov.info
+          if-no-files-found: warn
 
       - name: SonarCloud Scan (non-blocking)
         uses: SonarSource/sonarcloud-github-action@v2
