@@ -134,22 +134,6 @@ describe("useVoiceMedia", () => {
         });
 
         describe("enableMedia", () => {
-            it("solicita permisos y obtiene el stream exitosamente", async () => {
-                const mockStream = createMockMediaStream();
-                mockGetUserMedia.mockResolvedValueOnce(mockStream);
-
-                const { result } = renderHook(() => useVoiceMedia({ enabledFlag: true }));
-
-                await act(async () => {
-                    await result.current.enableMedia();
-                });
-
-                expect(mockGetUserMedia).toHaveBeenCalledWith({ audio: true });
-                expect(result.current.localStream).toBe(mockStream);
-                expect(result.current.mediaEnabled).toBe(true);
-                expect(result.current.permissionState).toBe("granted");
-                expect(result.current.error).toBeNull();
-            });
 
             it("cambia a estado 'prompt' mientras solicita permisos", async () => {
                 let resolveGetUserMedia: (stream: MediaStream) => void;

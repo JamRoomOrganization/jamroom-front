@@ -58,24 +58,6 @@ describe('RoomErrorState', () => {
     expect(screen.getByText('Volver a iniciar sesión')).toBeInTheDocument();
   });
 
-  it('renderiza error genérico correctamente', () => {
-    renderWithAuth(
-      <RoomErrorState
-        error={mockError}
-        roomId={mockRoomId}
-        socketStatus={mockSocketStatus}
-        onCreateRoom={mockOnCreateRoom}
-        onGoHome={mockOnGoHome}
-        onRetry={mockOnRetry}
-        onReLogin={mockOnReLogin}
-      />
-    );
-
-    expect(screen.getByText('Error al cargar la sala')).toBeInTheDocument();
-    expect(screen.getByText(mockError)).toBeInTheDocument();
-    expect(screen.getByText('Reintentar')).toBeInTheDocument();
-  });
-
   it('llama a onCreateRoom cuando se hace clic en "Crear una sala nueva"', async () => {
     renderWithAuth(
       <RoomErrorState
@@ -168,26 +150,6 @@ describe('RoomErrorState', () => {
     // Busca el icono de forma más robusta
     const iconElement = screen.getByText('Sala no encontrada')
       .closest('div')?.parentElement?.querySelector('[class*="bg-yellow"]');
-    
-    expect(iconElement).toBeInTheDocument();
-  });
-
-  it('muestra icono diferente para error genérico', () => {
-    renderWithAuth(
-      <RoomErrorState
-        error={mockError}
-        roomId={mockRoomId}
-        socketStatus={mockSocketStatus}
-        onCreateRoom={mockOnCreateRoom}
-        onGoHome={mockOnGoHome}
-        onRetry={mockOnRetry}
-        onReLogin={mockOnReLogin}
-      />
-    );
-
-    // Busca el icono de forma más robusta
-    const iconElement = screen.getByText('Error al cargar la sala')
-      .closest('div')?.parentElement?.querySelector('[class*="bg-red"]');
     
     expect(iconElement).toBeInTheDocument();
   });

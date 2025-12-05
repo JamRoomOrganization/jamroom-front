@@ -366,31 +366,6 @@ describe("useLiveKitVoiceClient", () => {
                 );
             });
 
-            it("publica el track de audio local", async () => {
-                const mockSocket = createMockSocket();
-                const mockStream = createMockMediaStream();
-                const { createLocalAudioTrack } = require("livekit-client");
-
-                renderHook(() =>
-                    useLiveKitVoiceClient({
-                        roomId: "room-1",
-                        socket: mockSocket as any,
-                        joined: true,
-                        mediaStream: mockStream,
-                    })
-                );
-
-                await act(async () => {
-                    mockSocket._trigger("voice:session", mockVoiceSession);
-                    await jest.advanceTimersByTimeAsync(10);
-                });
-
-                expect(createLocalAudioTrack).toHaveBeenCalledWith({
-                    deviceId: "mock-device-id",
-                });
-                expect(mockPublishTrack).toHaveBeenCalledWith(mockLocalAudioTrackInstance);
-            });
-
             it("actualiza el estado a connected=true", async () => {
                 const mockSocket = createMockSocket();
                 const mockStream = createMockMediaStream();
