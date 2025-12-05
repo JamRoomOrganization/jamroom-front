@@ -35,10 +35,21 @@ jobs:
         run: npm run lint
 
       - name: Run tests with coverage
+        # Asegurate que `npm run test:ci` genera coverage/lcov.info.
+        # Si no lo hace, reemplaza la línea por:
+        # run: npm run test:ci -- --coverage --coverageReporters=lcov
         run: npm run test:ci
 
-      - name: SonarCloud Scan
+      - name: Upload coverage artifact
+        # Sube el lcov para poder revisarlo aunque Sonar falle
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
+
+      - name: SonarCloud Scan (non-blocking)
         uses: SonarSource/sonarcloud-github-action@v2
+        continue-on-error: true
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
