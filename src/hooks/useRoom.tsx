@@ -639,6 +639,7 @@ function useRoom(roomId: string) {
         });
 
         const socket = io(SYNC_SERVICE_URL, {
+            path: '/syncronization/socket.io',
             withCredentials: false,
             reconnection: true,
             reconnectionAttempts: Infinity,
