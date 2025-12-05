@@ -34,7 +34,7 @@ describe("audiusClient", () => {
     jest.resetModules();
     // TypeScript/ESM interop: global.fetch exists in JSDOM environment used by Jest
     // We'll mock it inside each test explicitly.
-    // @ts-expect-error
+    // @ts-expect-error: mock para testing
     if (global.fetch && "mockClear" in global.fetch) {
       // noop
     }
@@ -46,7 +46,7 @@ describe("audiusClient", () => {
 
   // preparar fetch mock que inspecciona la URL solicitada
   // y devuelve respuestas distintas según la URL
-  // @ts-expect-error
+  // @ts-expect-error: mock para testing
   global.fetch = jest.fn().mockImplementation(async (input: RequestInfo | string) => {
     const url = String(input);
 
@@ -108,7 +108,7 @@ describe("audiusClient", () => {
 
     // ahora comprobamos que fetch fue llamado con la URL de búsqueda normalizada
     // buscamos entre las llamadas cuál contiene '/v1/tracks/search'
-    // @ts-expect-error
+    // @ts-expect-error: mock para testing
     const fetchCalls = global.fetch.mock.calls.map((c: any[]) => String(c[0]));
     const usedSearchCall = fetchCalls.find((u: string) =>
         u.includes("/v1/tracks/search")
@@ -160,7 +160,7 @@ describe("audiusClient", () => {
     expect(res[0].id).toBe("t-fb");
 
     // además verificamos que la segunda fetch usada fue contra el fallback discovery
-    // @ts-expect-error
+    // @ts-expect-error: mock para testing
     const calls = (global as any).fetch.mock.calls.map((c: any[]) => String(c[0]));
     const used = calls.find((u: string) => u.includes("discoveryprovider.audius.co/v1/tracks/search"));
     expect(used).toBeDefined();
@@ -170,7 +170,7 @@ describe("audiusClient", () => {
   test("searchAudiusTracks returns [] for empty/whitespace query", async () => {
     const mod = await (async () => {
       // minimal fetch mock to not be used
-      // @ts-expect-error
+      // @ts-expect-error: mock para testing
       global.fetch = makeFetchMock([{ ok: true, json: {} }]);
       return import("../lib/audiusClient");
     })();
@@ -193,7 +193,7 @@ describe("audiusClient", () => {
         },
       },
     ];
-    // @ts-expect-error
+    // @ts-expect-error: mock para testing
     global.fetch = makeFetchMock(responses);
 
     const mod = await import("../lib/audiusClient");
@@ -211,14 +211,14 @@ describe("audiusClient", () => {
 
     // Ensure fetch was called at least once (discovery + search). Further calls should be limited (we cannot inspect internal Map directly easily here).
     // The mock tracks calls via its internal counter; ensure it was called at least twice.
-    // @ts-expect-error
+    // @ts-expect-error: mock para testing
     expect(global.fetch.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   test("getAudiusStreamUrl returns same url if already audius-content url", async () => {
     // fresh import and a no-op fetch (should not be invoked)
     const mod = await (async () => {
-      // @ts-expect-error
+      // @ts-expect-error: mock para testing
       global.fetch = jest.fn();
       return import("../lib/audiusClient");
     })();
@@ -228,7 +228,7 @@ describe("audiusClient", () => {
     const out = await getAudiusStreamUrl(input, 1);
     expect(out).toBe(input);
     // fetch should not be called
-    // @ts-ignore
+    // @ts-expect-error: mock para testing
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -239,7 +239,7 @@ describe("audiusClient", () => {
       // stream endpoint response with data string
       { ok: true, json: { data: "https://cdn.example.com/track.mp3" } },
     ];
-    // @ts-ignore
+    // @ts-expect-error: mock para testing
     global.fetch = makeFetchMock(responses);
 
     const mod = await import("../lib/audiusClient");
@@ -254,7 +254,7 @@ describe("audiusClient", () => {
       { ok: true, json: { data: ["https://d.example.com/"] } },
       { ok: true, json: { url: "https://cdn.example.com/from-url.mp3" } },
     ];
-    // @ts-ignore
+    // @ts-expect-error: mock para testing
     global.fetch = makeFetchMock(responses);
 
     const mod = await import("../lib/audiusClient");
@@ -272,7 +272,7 @@ describe("audiusClient", () => {
         json: { data: [{ url: "https://cdn.example.com/arr0.mp3" }, { url: "https://cdn.example.com/arr1.mp3" }] },
       },
     ];
-    // @ts-ignore
+    // @ts-expect-error: mock para testing
     global.fetch = makeFetchMock(responses);
 
     const mod = await import("../lib/audiusClient");
@@ -288,7 +288,7 @@ describe("audiusClient", () => {
       { ok: true, json: { data: ["https://d.example.com"] } },
       { ok: false, status: 500, text: "internal" },
     ];
-    // @ts-ignore
+    // @ts-expect-error: mock para testing
     global.fetch = makeFetchMock(responses);
 
     const mod = await import("../lib/audiusClient");
@@ -301,7 +301,7 @@ describe("audiusClient", () => {
 
   test("searchAudiusTracks returns empty on network error", async () => {
     // discovery ok, search fetch throws
-    // @ts-ignore
+    // @ts-expect-error: mock para testing
     global.fetch = jest.fn()
       // first call discovery
       .mockImplementationOnce(() => Promise.resolve({ ok: true, json: async () => ({ data: ["https://d.example.com/"] }) }))

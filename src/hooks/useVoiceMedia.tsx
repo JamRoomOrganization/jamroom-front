@@ -248,7 +248,6 @@ export function useVoiceMedia(options?: UseVoiceMediaOptions): UseVoiceMediaResu
             debugLog("requesting microphone access with optimized constraints");
 
             let stream: MediaStream;
-            let constraintsUsed = "optimized";
 
             try {
                 // Intentar con constraints de alta calidad primero

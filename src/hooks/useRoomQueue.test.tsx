@@ -1,4 +1,3 @@
-// hooks/useRoomQueue.test.tsx
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useRoomQueue } from './useRoomQueue';
 import { api } from '../lib/api';
@@ -228,7 +227,7 @@ describe('useRoomQueue', () => {
       await act(async () => {
         await result.current.addTrack(mockTrackId);
       });
-    } catch (err) {
+    } catch {
       // Esperado que falle
     }
     
@@ -292,7 +291,7 @@ describe('useRoomQueue', () => {
       await act(async () => {
         await result.current.removeTrack(mockTrackId);
       });
-    } catch (err) {
+    } catch {
       // Esperado que falle
     }
     

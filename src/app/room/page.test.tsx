@@ -1,6 +1,6 @@
 import React from "react";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
-import { useRouter, useParams } from "next/navigation";
+import { render, screen, waitFor } from "@testing-library/react";
+import { useParams } from "next/navigation";
 import RoomPage from "../room/[id]/page";
 import "@testing-library/jest-dom";
 
