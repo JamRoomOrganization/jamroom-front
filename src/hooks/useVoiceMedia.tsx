@@ -238,6 +238,9 @@ export function useVoiceMedia(options?: UseVoiceMediaOptions): UseVoiceMediaResu
             return;
         }
 
+        // declarar aquí para que esté disponible en todo el scope de la función
+        let constraintsUsed: "optimized" | "medium" | "basic" = "optimized";
+
         try {
             // Cambiar a estado "prompt" mientras esperamos
             if (mountedRef.current) {
@@ -318,6 +321,7 @@ export function useVoiceMedia(options?: UseVoiceMediaOptions): UseVoiceMediaResu
 
             debugLog("microphone access granted", {
                 trackCount: stream.getAudioTracks().length,
+                constraintsUsed, // ahora disponible aquí si lo quieres usar
             });
 
             // Guardar el stream
@@ -347,6 +351,7 @@ export function useVoiceMedia(options?: UseVoiceMediaOptions): UseVoiceMediaResu
             enablingRef.current = false;
         }
     }, [mediaEnabled_flag, mediaEnabled, stopStream]);
+
 
     /**
      * Deshabilita el micrófono y libera los recursos.
