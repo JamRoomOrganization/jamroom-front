@@ -1,4 +1,3 @@
-// src/lib/__tests__/audiusClient.test.ts
 import { jest } from "@jest/globals";
 
 type MockResp = {
@@ -35,7 +34,7 @@ describe("audiusClient", () => {
     jest.resetModules();
     // TypeScript/ESM interop: global.fetch exists in JSDOM environment used by Jest
     // We'll mock it inside each test explicitly.
-    // @ts-ignore
+    // @ts-expect-error
     if (global.fetch && "mockClear" in global.fetch) {
       // noop
     }
@@ -47,7 +46,7 @@ describe("audiusClient", () => {
 
   // preparar fetch mock que inspecciona la URL solicitada
   // y devuelve respuestas distintas según la URL
-  // @ts-ignore
+  // @ts-expect-error
   global.fetch = jest.fn().mockImplementation(async (input: RequestInfo | string) => {
     const url = String(input);
 
@@ -109,7 +108,7 @@ describe("audiusClient", () => {
 
     // ahora comprobamos que fetch fue llamado con la URL de búsqueda normalizada
     // buscamos entre las llamadas cuál contiene '/v1/tracks/search'
-    // @ts-ignore
+    // @ts-expect-error
     const fetchCalls = global.fetch.mock.calls.map((c: any[]) => String(c[0]));
     const usedSearchCall = fetchCalls.find((u: string) =>
         u.includes("/v1/tracks/search")
@@ -161,7 +160,7 @@ describe("audiusClient", () => {
     expect(res[0].id).toBe("t-fb");
 
     // además verificamos que la segunda fetch usada fue contra el fallback discovery
-    // @ts-ignore
+    // @ts-expect-error
     const calls = (global as any).fetch.mock.calls.map((c: any[]) => String(c[0]));
     const used = calls.find((u: string) => u.includes("discoveryprovider.audius.co/v1/tracks/search"));
     expect(used).toBeDefined();
@@ -171,7 +170,7 @@ describe("audiusClient", () => {
   test("searchAudiusTracks returns [] for empty/whitespace query", async () => {
     const mod = await (async () => {
       // minimal fetch mock to not be used
-      // @ts-ignore
+      // @ts-expect-error
       global.fetch = makeFetchMock([{ ok: true, json: {} }]);
       return import("../lib/audiusClient");
     })();
@@ -194,7 +193,7 @@ describe("audiusClient", () => {
         },
       },
     ];
-    // @ts-ignore
+    // @ts-expect-error
     global.fetch = makeFetchMock(responses);
 
     const mod = await import("../lib/audiusClient");
@@ -212,14 +211,14 @@ describe("audiusClient", () => {
 
     // Ensure fetch was called at least once (discovery + search). Further calls should be limited (we cannot inspect internal Map directly easily here).
     // The mock tracks calls via its internal counter; ensure it was called at least twice.
-    // @ts-ignore
+    // @ts-expect-error
     expect(global.fetch.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
   test("getAudiusStreamUrl returns same url if already audius-content url", async () => {
     // fresh import and a no-op fetch (should not be invoked)
     const mod = await (async () => {
-      // @ts-ignore
+      // @ts-expect-error
       global.fetch = jest.fn();
       return import("../lib/audiusClient");
     })();
