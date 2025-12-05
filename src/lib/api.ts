@@ -1,20 +1,33 @@
+import type { LobbyRoom } from "../types";
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-// Si NEXT_PUBLIC_API_BASE_URL no está definida, usa string vacío
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
-// Solo lanzar error en cliente en producción, no durante el build
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001";
+
 if (typeof window !== "undefined" && process.env.NODE_ENV === "production" && !API_BASE_URL) {
   throw new Error("NEXT_PUBLIC_API_BASE_URL environment variable must be set in production.");
 }
 
 type FetchOptions = {
-  method?: HttpMethod;
+  method?: HttpMethod;  
   body?: unknown;
   headers?: Record<string, string>;
   auth?: boolean;
   withCredentials?: boolean;
 };
+
+export async function fetchPublicRooms(): Promise<LobbyRoom[]> {
+  try {
+    const res = await api.get<LobbyRoom[]>('/api/rooms/public', false);
+    if (res && Array.isArray((res as any).data)) return (res as any).data;
+    if (Array.isArray(res)) return res as unknown as LobbyRoom[];
+    return [];
+  } catch (error) {
+    console.error('Error fetching public rooms:', error);
+    throw error;
+  }
+}
+
 
 export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
@@ -29,26 +42,48 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, {
-    method: options.method || "GET",
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-    credentials: options.withCredentials ? "include" : "omit",
-  });
+  try {
 
-  const isJson = res.headers.get("content-type")?.includes("application/json");
-  const data = isJson ? await res.json() : (null as unknown as T);
+    const res = await fetch(url, {
+      method: options.method || "GET",
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      credentials: options.withCredentials ? "include" : "omit",
+    });
 
-  if (!res.ok) {
-    const message = (data as { message?: string } | null)?.message || `HTTP ${res.status}`;
-    throw new Error(message);
+    const isJson = res.headers.get("content-type")?.includes("application/json");
+    const data = isJson ? await res.json() : (null as unknown as T);
+
+    if (!res.ok) {
+      const message = (data as { message?: string } | null)?.message || `HTTP ${res.status}`;
+      console.error(`[API] Error en ${options.method || "GET"} ${url}:`, {
+        status: res.status,
+        statusText: res.statusText,
+        message,
+        data,
+      });
+      throw new Error(message);
+    }
+
+    return data as T;
+  } catch (error) {
+    if (error instanceof TypeError && error.message === "Failed to fetch") {
+      console.error(`[API] Failed to fetch ${url}`);
+      console.error(`[API] Posibles causas:`);
+      console.error(`  1. El servidor en ${API_BASE_URL} no está corriendo`);
+      console.error(`  2. Problema de CORS`);
+      console.error(`  3. No hay conexión de red`);
+      throw new Error(`No se pudo conectar al servidor en ${API_BASE_URL}. Verifica que el backend esté corriendo.`);
+    }
+    throw error;
   }
-
-  return data as T;
 }
 
 export const api = {
-  get: <T>(path: string, auth = false) => apiFetch<T>(path, { method: "GET", auth }),
+  get: async <T>(path: string, auth = false) => {
+    const result = await apiFetch<T>(path, { method: "GET", auth });
+    return { data: result };
+  },
   post: <T>(path: string, body?: unknown, auth = false) => apiFetch<T>(path, { method: "POST", body, auth }),
   put: <T>(path: string, body?: unknown, auth = false) => apiFetch<T>(path, { method: "PUT", body, auth }),
   patch: <T>(path: string, body?: unknown, auth = false) => apiFetch<T>(path, { method: "PATCH", body, auth }),
