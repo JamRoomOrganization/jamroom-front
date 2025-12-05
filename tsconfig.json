@@ -46,7 +46,7 @@
     "**/*.test.tsx",
     "**/*.spec.ts",
     "**/*.spec.tsx",
-    "jest.config.cjs",
+    "jest.config.js",
     "jest.setup.ts",
     "test-style-mock.js"
   ]
