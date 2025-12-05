@@ -175,6 +175,11 @@ export default function RoomPage() {
 
     const { deleteRoom, leaveRoom, removeMember } = useRoomActions(roomId);
 
+    // Ref para evitar re-ejecutar auto-play del primer track
+    const hasAutoPlayedFirstTrackRef = React.useRef(false);
+    // Ref para rastrear el último track ID reproducido
+    const lastPlayedTrackIdRef = React.useRef<string | null>(null);
+
     const isHost = members.some(
         (member) =>
             member.user_id === user?.id && member.roles?.includes("host")
@@ -289,6 +294,44 @@ export default function RoomPage() {
             router.replace("/");
         }
     }, [authLoading, user, isMember, router, showInfoToast]);
+
+    // Auto-play: cuando se añade la primera canción a una cola vacía
+    useEffect(() => {
+        // Solo ejecutar si:
+        // 1. La cola ya cargó (no está loading)
+        // 2. Hay exactamente 1 track en la cola
+        // 3. No hay track actualmente reproduciéndose
+        // 4. No hemos auto-reproducido ya este track
+        // 5. El socket está conectado
+        if (
+            !queueLoading &&
+            queue.length === 1 &&
+            !currentTrackId &&
+            !hasAutoPlayedFirstTrackRef.current &&
+            socketStatus === "connected"
+        ) {
+            const firstTrack = queue[0];
+            if (firstTrack.streamUrl && firstTrack.id !== lastPlayedTrackIdRef.current) {
+                console.log("[RoomPage] Auto-reproduciendo primer track de la cola:", firstTrack.id);
+                hasAutoPlayedFirstTrackRef.current = true;
+                lastPlayedTrackIdRef.current = firstTrack.id;
+                
+                // Pequeño delay para asegurar que el socket esté listo
+                setTimeout(() => {
+                    changeTrackFromExternalStream({
+                        trackId: firstTrack.id,
+                        streamUrl: firstTrack.streamUrl!,
+                    });
+                }, 100);
+            }
+        }
+    }, [queue, queueLoading, currentTrackId, socketStatus, changeTrackFromExternalStream]);
+
+    // Reset del flag de auto-play cuando cambia la sala
+    useEffect(() => {
+        hasAutoPlayedFirstTrackRef.current = false;
+        lastPlayedTrackIdRef.current = null;
+    }, [roomId]);
 
     // Añadir a cola
     const handleAddAndPlay = useCallback(

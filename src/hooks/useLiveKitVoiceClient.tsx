@@ -564,13 +564,21 @@ export function useLiveKitVoiceClient(
                     });
                 }
 
-                // Crear y publicar el track de audio local
+                // Crear y publicar el track de audio local con constraints de alta calidad
                 const audioTrack = stream.getAudioTracks()[0];
                 if (audioTrack) {
-                    const deviceId = audioTrack.getSettings().deviceId;
+                    const settings = audioTrack.getSettings();
+                    const deviceId = settings.deviceId;
 
+                    // Crear track con constraints optimizados para voz de alta calidad
                     const localTrack = await createLocalAudioTrack({
                         deviceId: deviceId,
+                        // Configuración de procesamiento de audio de alta calidad
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        // Tasa de bits optimizada para voz (reduce ancho de banda sin perder calidad)
+                        // LiveKit usará Opus codec por defecto que es excelente para voz
                     });
 
                     // Verificar que aún estamos montados
