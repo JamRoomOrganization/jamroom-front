@@ -533,7 +533,6 @@ export default function RoomPage() {
                             onLivekitStartAudio={livekitStartAudio}
                             onClearError={clearVoiceError}
                         />
-                        <ChatPanel />
                     </aside>
                 </div>
             </main>
