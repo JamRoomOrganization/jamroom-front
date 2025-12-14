@@ -217,6 +217,7 @@ export function useVoiceChat(
 
     // Refs para evitar closures stale
     const userIdRef = useRef<string | null>(null);
+    const usernameRef = useRef<string | null>(null);
     const socketRef = useRef<Socket | null>(null);
 
     // Ref para el timeout de joinVoice (para poder cancelarlo en cleanup)
@@ -231,7 +232,9 @@ export function useVoiceChat(
     // Actualizar refs
     useEffect(() => {
         userIdRef.current = user?.id ?? null;
-    }, [user?.id]);
+        // Usar name, email o un fallback para username
+        usernameRef.current = user?.name ?? user?.email ?? null;
+    }, [user?.id, user?.name, user?.email]);
 
     useEffect(() => {
         socketRef.current = socket;
@@ -483,12 +486,18 @@ export function useVoiceChat(
             return;
         }
 
-        console.log("[VoiceChat] emitting voice:join", { roomId, userId: currentUserId });
+        const currentUsername = usernameRef.current;
+        console.log("[VoiceChat] emitting voice:join", { roomId, userId: currentUserId, username: currentUsername });
         setJoining(true);
         setVoiceError(NO_ERROR);
 
-        // Enviar userId explícitamente para mayor robustez
-        currentSocket.emit("voice:join", { roomId, userId: currentUserId });
+        // Enviar userId y username explícitamente para mayor robustez
+        // El backend requiere username para crear la sesión de voz
+        currentSocket.emit("voice:join", { 
+            roomId, 
+            userId: currentUserId,
+            username: currentUsername || `user-${currentUserId.slice(0, 8)}`
+        });
 
         // Cancelar timeout previo si existía
         if (joinTimeoutRef.current) {

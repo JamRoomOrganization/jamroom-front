@@ -186,6 +186,7 @@ describe("useVoiceChat", () => {
                 expect(mockSocket.emit).toHaveBeenCalledWith("voice:join", {
                     roomId: "room-1",
                     userId: "user-123",
+                    username: "Test User",
                 });
                 expect(result.current.joining).toBe(true);
             });
