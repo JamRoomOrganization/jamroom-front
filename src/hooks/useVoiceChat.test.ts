@@ -185,6 +185,7 @@ describe("useVoiceChat", () => {
 
                 expect(mockSocket.emit).toHaveBeenCalledWith("voice:join", {
                     roomId: "room-1",
+                    userId: "user-123",
                 });
                 expect(result.current.joining).toBe(true);
             });
@@ -253,6 +254,7 @@ describe("useVoiceChat", () => {
 
                 expect(mockSocket.emit).toHaveBeenCalledWith("voice:leave", {
                     roomId: "room-1",
+                    userId: "user-123",
                 });
                 expect(result.current.joined).toBe(false);
             });
@@ -297,6 +299,7 @@ describe("useVoiceChat", () => {
 
                 expect(mockSocket.emit).toHaveBeenCalledWith("voice:mute", {
                     roomId: "room-1",
+                    userId: "user-123",
                     muted: false,
                 });
                 expect(result.current.muted).toBe(false);
@@ -1242,6 +1245,44 @@ describe("useVoiceChat", () => {
 
                 expect(result.current.voiceError.code).toBe("VOICE_SERVICE_UNAVAILABLE");
                 expect(result.current.voiceError.retryable).toBe(true);
+            });
+
+            it("mapea errores del servidor con código VOICE_INVALID_USER_ID cuando viene del backend", () => {
+                const mockSocket = createMockSocket();
+
+                const { result } = renderHook(() =>
+                    useVoiceChat("room-1", mockSocket as any)
+                );
+
+                act(() => {
+                    mockSocket._trigger("voice:error", {
+                        message: "Invalid userId",
+                        code: "VOICE_INVALID_USER_ID",
+                    });
+                });
+
+                expect(result.current.voiceError.code).toBe("VOICE_INVALID_USER_ID");
+                expect(result.current.voiceError.retryable).toBe(false);
+                expect(result.current.voiceError.uiMessage).toBe("Debes iniciar sesión para unirte al chat de voz");
+            });
+
+            it("establece VOICE_INVALID_USER_ID si el usuario no está autenticado al hacer joinVoice", () => {
+                // Simular usuario no autenticado
+                mockUseAuth.mockReturnValue({ user: null });
+                const mockSocket = createMockSocket();
+
+                const { result } = renderHook(() =>
+                    useVoiceChat("room-1", mockSocket as any)
+                );
+
+                act(() => {
+                    result.current.joinVoice();
+                });
+
+                expect(mockSocket.emit).not.toHaveBeenCalled();
+                expect(result.current.voiceError.code).toBe("VOICE_INVALID_USER_ID");
+                expect(result.current.voiceError.retryable).toBe(false);
+                expect(result.current.voiceError.uiMessage).toBe("Debes iniciar sesión para unirte al chat de voz");
             });
         });
     });

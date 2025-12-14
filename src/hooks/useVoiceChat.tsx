@@ -93,6 +93,8 @@ export const VoiceErrorCodes = {
     VOICE_KICKED: "VOICE_KICKED",
     /** Error genérico del servidor */
     VOICE_SERVER_ERROR: "VOICE_SERVER_ERROR",
+    /** Usuario no autenticado o userId inválido */
+    VOICE_INVALID_USER_ID: "VOICE_INVALID_USER_ID",
 } as const;
 
 export type VoiceErrorCode = typeof VoiceErrorCodes[keyof typeof VoiceErrorCodes];
@@ -342,20 +344,31 @@ export function useVoiceChat(
             let uiMessage = payload.message;
             let retryable = true;
 
-            // Detectar tipos de error específicos
-            const msg = (payload.message || "").toLowerCase();
-            if (msg.includes("no disponible") || msg.includes("unavailable")) {
-                code = VoiceErrorCodes.VOICE_SERVICE_UNAVAILABLE;
-                uiMessage = "El servicio de voz no está disponible. Intenta más tarde.";
-                retryable = true;
-            } else if (msg.includes("timeout") || msg.includes("tiempo de espera")) {
-                code = VoiceErrorCodes.VOICE_JOIN_TIMEOUT;
-                uiMessage = "No se pudo conectar al canal de voz. Intenta nuevamente.";
-                retryable = true;
-            } else if (msg.includes("expulsado") || msg.includes("kicked")) {
-                code = VoiceErrorCodes.VOICE_KICKED;
-                uiMessage = "Has sido expulsado del canal de voz.";
+            // Primero, verificar si el servidor envió un código de error específico
+            if (payload.code === "VOICE_INVALID_USER_ID") {
+                code = VoiceErrorCodes.VOICE_INVALID_USER_ID;
+                uiMessage = "Debes iniciar sesión para unirte al chat de voz";
                 retryable = false;
+            } else {
+                // Detectar tipos de error específicos por mensaje
+                const msg = (payload.message || "").toLowerCase();
+                if (msg.includes("no disponible") || msg.includes("unavailable")) {
+                    code = VoiceErrorCodes.VOICE_SERVICE_UNAVAILABLE;
+                    uiMessage = "El servicio de voz no está disponible. Intenta más tarde.";
+                    retryable = true;
+                } else if (msg.includes("timeout") || msg.includes("tiempo de espera")) {
+                    code = VoiceErrorCodes.VOICE_JOIN_TIMEOUT;
+                    uiMessage = "No se pudo conectar al canal de voz. Intenta nuevamente.";
+                    retryable = true;
+                } else if (msg.includes("expulsado") || msg.includes("kicked")) {
+                    code = VoiceErrorCodes.VOICE_KICKED;
+                    uiMessage = "Has sido expulsado del canal de voz.";
+                    retryable = false;
+                } else if (msg.includes("invalid") && msg.includes("user")) {
+                    code = VoiceErrorCodes.VOICE_INVALID_USER_ID;
+                    uiMessage = "Debes iniciar sesión para unirte al chat de voz";
+                    retryable = false;
+                }
             }
 
             setVoiceError({ code, message: payload.message, uiMessage, retryable });
@@ -424,17 +437,32 @@ export function useVoiceChat(
 
     // Unirse al chat de voz
     const joinVoice = useCallback(() => {
+        const currentUserId = userIdRef.current;
+        
         console.log("[VoiceChat] joinVoice called", {
             voiceEnabled,
             hasSocket: !!socketRef.current,
             socketConnected: socketRef.current?.connected,
             roomId,
+            userId: currentUserId,
             joining,
             joined,
         });
 
         if (!voiceEnabled) {
             console.log("[VoiceChat] joinVoice blocked: voiceEnabled=false");
+            return;
+        }
+
+        // Validar que el usuario esté autenticado
+        if (!currentUserId) {
+            console.log("[VoiceChat] joinVoice blocked: no userId (user not authenticated)");
+            setVoiceError({
+                code: VoiceErrorCodes.VOICE_INVALID_USER_ID,
+                message: "User not authenticated",
+                uiMessage: "Debes iniciar sesión para unirte al chat de voz",
+                retryable: false,
+            });
             return;
         }
 
@@ -455,11 +483,12 @@ export function useVoiceChat(
             return;
         }
 
-        console.log("[VoiceChat] emitting voice:join", { roomId });
+        console.log("[VoiceChat] emitting voice:join", { roomId, userId: currentUserId });
         setJoining(true);
         setVoiceError(NO_ERROR);
 
-        currentSocket.emit("voice:join", { roomId });
+        // Enviar userId explícitamente para mayor robustez
+        currentSocket.emit("voice:join", { roomId, userId: currentUserId });
 
         // Cancelar timeout previo si existía
         if (joinTimeoutRef.current) {
@@ -508,8 +537,9 @@ export function useVoiceChat(
             return;
         }
 
-        debugLog("emitting voice:leave", { roomId });
-        currentSocket.emit("voice:leave", { roomId });
+        const currentUserId = userIdRef.current;
+        debugLog("emitting voice:leave", { roomId, userId: currentUserId });
+        currentSocket.emit("voice:leave", { roomId, userId: currentUserId });
 
         // Actualización optimista
         setJoined(false);
@@ -556,9 +586,10 @@ export function useVoiceChat(
         }
 
         const newMuted = !muted;
-        debugLog("emitting voice:mute", { roomId, muted: newMuted });
+        const currentUserId = userIdRef.current;
+        debugLog("emitting voice:mute", { roomId, userId: currentUserId, muted: newMuted });
 
-        currentSocket.emit("voice:mute", { roomId, muted: newMuted });
+        currentSocket.emit("voice:mute", { roomId, userId: currentUserId, muted: newMuted });
 
         // Actualización optimista
         setMuted(newMuted);
