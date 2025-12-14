@@ -415,7 +415,7 @@ describe("useLiveKitVoiceClient", () => {
 
                 await waitFor(() => {
                     expect(result.current.error).toBe(
-                        "No se pudo conectar al servidor de voz."
+                        "Error al conectar con el servidor de voz. Intenta nuevamente."
                     );
                     expect(result.current.connected).toBe(false);
                     expect(result.current.connecting).toBe(false);
@@ -683,7 +683,8 @@ describe("useLiveKitVoiceClient", () => {
                 }
 
                 await waitFor(() => {
-                    expect(result.current.errorType).toBe("CONNECTION_FAILED");
+                    // Los errores de red/fetch ahora se marcan como LIVEKIT_UNAVAILABLE
+                    expect(result.current.errorType).toBe("LIVEKIT_UNAVAILABLE");
                     expect(result.current.reconnecting).toBe(false);
                 });
             });
@@ -759,7 +760,8 @@ describe("useLiveKitVoiceClient", () => {
                 });
 
                 // Hacer que el siguiente intento falle y luego funcione
-                mockConnect.mockRejectedValueOnce(new Error("Network"));
+                // Usamos "Server error" en vez de "Network" para evitar que sea tratado como LIVEKIT_UNAVAILABLE
+                mockConnect.mockRejectedValueOnce(new Error("Server error"));
                 mockConnect.mockResolvedValueOnce(undefined);
 
                 // Simular desconexión

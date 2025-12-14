@@ -178,6 +178,44 @@ function isAuthError(error: unknown): boolean {
 }
 
 /**
+ * Determina si un error es de red/fetch (servidor no accesible).
+ */
+function isNetworkError(error: unknown): boolean {
+    if (error instanceof Error) {
+        const msg = error.message.toLowerCase();
+        return (
+            msg.includes("fetch failed") ||
+            msg.includes("network") ||
+            msg.includes("failed to fetch") ||
+            msg.includes("net::err") ||
+            msg.includes("networkerror") ||
+            msg.includes("connection refused") ||
+            msg.includes("econnrefused") ||
+            msg.includes("timeout")
+        );
+    }
+    return false;
+}
+
+/**
+ * Obtiene un mensaje de error amigable basado en el tipo de error.
+ */
+function getErrorMessage(error: unknown): string {
+    if (isAuthError(error)) {
+        return "Error de autenticación con el servidor de voz. Por favor, sal y vuelve a unirte.";
+    }
+    if (isNetworkError(error)) {
+        return "No se puede conectar al servidor de voz. Verifica tu conexión a internet.";
+    }
+    if (error instanceof Error) {
+        // Para otros errores, mostrar un mensaje genérico pero loggear el real
+        console.error("[LiveKit] Connection error details:", error.message);
+        return "Error al conectar con el servidor de voz. Intenta nuevamente.";
+    }
+    return "Error desconocido al conectar con el servidor de voz.";
+}
+
+/**
  * Calcula el delay para el siguiente intento con backoff exponencial.
  */
 function calculateBackoffDelay(attempt: number): number {
@@ -615,11 +653,13 @@ export function useLiveKitVoiceClient(
                 });
 
                 if (mountedRef.current) {
-                    // Determinar tipo de error
+                    // Determinar tipo de error y mensaje apropiado
+                    const errorMessage = getErrorMessage(err);
+                    
                     if (isAuthError(err)) {
                         setLivekitErrorFromType(
                             "AUTH_FAILED",
-                            "Error de autenticación con el servidor de voz. Por favor, sal y vuelve a unirte.",
+                            errorMessage,
                             false
                         );
                         setConnected(false);
@@ -628,6 +668,16 @@ export function useLiveKitVoiceClient(
                         // No reintentar en errores de auth
                         reconnectAttemptsRef.current = RECONNECT_CONFIG.maxAttempts;
                         setReconnectAttempts(RECONNECT_CONFIG.maxAttempts);
+                    } else if (isNetworkError(err)) {
+                        // Error de red - servidor no accesible
+                        setLivekitErrorFromType(
+                            "LIVEKIT_UNAVAILABLE",
+                            errorMessage,
+                            true
+                        );
+                        setConnected(false);
+                        setConnecting(false);
+                        setReconnecting(false);
                     } else if (isReconnect && reconnectAttemptsRef.current < RECONNECT_CONFIG.maxAttempts) {
                         // Programar otro reintento
                         const delay = calculateBackoffDelay(reconnectAttemptsRef.current);
@@ -651,7 +701,7 @@ export function useLiveKitVoiceClient(
                     } else {
                         setLivekitErrorFromType(
                             "CONNECTION_FAILED",
-                            "No se pudo conectar al servidor de voz.",
+                            errorMessage,
                             true
                         );
                         setConnected(false);
