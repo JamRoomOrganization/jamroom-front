@@ -97,6 +97,8 @@ export type UseLiveKitVoiceClientResult = {
     reconnecting: boolean;
     /** Indica si el navegador puede reproducir audio (autoplay permitido) */
     canPlaybackAudio: boolean;
+    /** Indica si el micrófono local está muteado en LiveKit */
+    isMicrophoneMuted: boolean;
     /** Error si ocurrió alguno */
     error: string | null;
     /** Tipo de error para manejo en UI */
@@ -109,6 +111,8 @@ export type UseLiveKitVoiceClientResult = {
     retryConnection: () => void;
     /** Función para iniciar la reproducción de audio (resolver autoplay) */
     startAudio: () => Promise<void>;
+    /** Función para habilitar/deshabilitar el micrófono en LiveKit (mute real) */
+    setMicrophoneEnabled: (enabled: boolean) => Promise<void>;
 };
 
 /**
@@ -150,12 +154,14 @@ const DISABLED_RESULT: UseLiveKitVoiceClientResult = {
     connecting: false,
     reconnecting: false,
     canPlaybackAudio: true,
+    isMicrophoneMuted: true,
     error: null,
     errorType: null,
     livekitError: NO_LIVEKIT_ERROR,
     reconnectAttempts: 0,
     retryConnection: () => {},
     startAudio: async () => {},
+    setMicrophoneEnabled: async () => {},
 };
 
 /**
@@ -262,6 +268,7 @@ export function useLiveKitVoiceClient(
     const [connecting, setConnecting] = useState(false);
     const [reconnecting, setReconnecting] = useState(false);
     const [canPlaybackAudio, setCanPlaybackAudio] = useState(true);
+    const [isMicrophoneMuted, setIsMicrophoneMuted] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [errorType, setErrorType] = useState<LiveKitErrorType>(null);
     const [livekitError, setLivekitError] = useState<LiveKitErrorState>(NO_LIVEKIT_ERROR);
@@ -605,33 +612,43 @@ export function useLiveKitVoiceClient(
                 // Crear y publicar el track de audio local con constraints de alta calidad
                 const audioTrack = stream.getAudioTracks()[0];
                 if (audioTrack) {
-                    const settings = audioTrack.getSettings();
-                    const deviceId = settings.deviceId;
+                    // Guard anti doble-publish: verificar si ya hay un track de mic publicado
+                    const existingMicPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+                    if (existingMicPub) {
+                        debugLog("guard: mic already published, skipping publish", {
+                            roomId,
+                            existingSid: existingMicPub.trackSid,
+                            existingMuted: existingMicPub.isMuted,
+                        });
+                    } else {
+                        const settings = audioTrack.getSettings();
+                        const deviceId = settings.deviceId;
 
-                    // Crear track con constraints optimizados para voz de alta calidad
-                    const localTrack = await createLocalAudioTrack({
-                        deviceId: deviceId,
-                        // Configuración de procesamiento de audio de alta calidad
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true,
-                        // Tasa de bits optimizada para voz (reduce ancho de banda sin perder calidad)
-                        // LiveKit usará Opus codec por defecto que es excelente para voz
-                    });
+                        // Crear track con constraints optimizados para voz de alta calidad
+                        const localTrack = await createLocalAudioTrack({
+                            deviceId: deviceId,
+                            // Configuración de procesamiento de audio de alta calidad
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true,
+                            // Tasa de bits optimizada para voz (reduce ancho de banda sin perder calidad)
+                            // LiveKit usará Opus codec por defecto que es excelente para voz
+                        });
 
-                    // Verificar que aún estamos montados
-                    if (!mountedRef.current) {
-                        localTrack.stop();
-                        room.disconnect();
-                        return;
+                        // Verificar que aún estamos montados
+                        if (!mountedRef.current) {
+                            localTrack.stop();
+                            room.disconnect();
+                            return;
+                        }
+
+                        localTrackRef.current = localTrack;
+
+                        // Publicar el track
+                        await room.localParticipant.publishTrack(localTrack);
+
+                        debugLog("local audio track published", { roomId });
                     }
-
-                    localTrackRef.current = localTrack;
-
-                    // Publicar el track
-                    await room.localParticipant.publishTrack(localTrack);
-
-                    debugLog("local audio track published", { roomId });
                 }
 
                 if (mountedRef.current) {
@@ -909,6 +926,63 @@ export function useLiveKitVoiceClient(
         };
     }, [cleanupLiveKit]);
 
+    /**
+     * Función para habilitar/deshabilitar el micrófono en LiveKit (mute real).
+     * Esta función controla el track de audio real publicado en LiveKit.
+     * Debe llamarse ANTES de emitir el evento de mute a Socket.IO para
+     * garantizar que el audio real se detenga antes de actualizar el estado.
+     * 
+     * @param enabled - true para activar el micrófono, false para silenciarlo
+     */
+    const setMicrophoneEnabled = useCallback(async (enabled: boolean) => {
+        debugLog("setMicrophoneEnabled called", { 
+            enabled, 
+            roomId, 
+            hasRoom: !!roomRef.current,
+            connected,
+        });
+
+        if (!roomRef.current) {
+            debugLog("setMicrophoneEnabled: no room connected", { roomId });
+            // Aun así, actualizar el estado local para mantener consistencia
+            if (mountedRef.current) {
+                setIsMicrophoneMuted(!enabled);
+            }
+            return;
+        }
+
+        try {
+            // Usar setMicrophoneEnabled del localParticipant de LiveKit
+            // Esta es la forma recomendada por LiveKit para mutear/desmutear
+            await roomRef.current.localParticipant.setMicrophoneEnabled(enabled);
+            
+            debugLog("setMicrophoneEnabled: LiveKit mic state changed", { 
+                roomId, 
+                enabled,
+                micTrackPublications: [...roomRef.current.localParticipant.audioTrackPublications.values()].map(p => ({
+                    sid: p.trackSid,
+                    isMuted: p.isMuted,
+                    source: p.source,
+                })),
+            });
+
+            if (mountedRef.current) {
+                setIsMicrophoneMuted(!enabled);
+            }
+        } catch (err) {
+            debugLog("setMicrophoneEnabled: error", {
+                roomId,
+                enabled,
+                error: err instanceof Error ? err.message : String(err),
+            });
+            // En caso de error, intentar actualizar el estado basado en el estado real
+            if (roomRef.current && mountedRef.current) {
+                const micPub = roomRef.current.localParticipant.getTrackPublication(Track.Source.Microphone);
+                setIsMicrophoneMuted(micPub?.isMuted ?? !enabled);
+            }
+        }
+    }, [connected, roomId]);
+
     // Si la feature no está habilitada, devolver resultado no-op
     if (!livekitEnabled) {
         return DISABLED_RESULT;
@@ -919,12 +993,14 @@ export function useLiveKitVoiceClient(
         connecting,
         reconnecting,
         canPlaybackAudio,
+        isMicrophoneMuted,
         error,
         errorType,
         livekitError,
         reconnectAttempts,
         retryConnection,
         startAudio,
+        setMicrophoneEnabled,
     };
 }
 

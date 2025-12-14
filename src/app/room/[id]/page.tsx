@@ -156,12 +156,43 @@ export default function RoomPage() {
         livekitError: livekitErrorState,
         retryConnection: livekitRetryConnection,
         startAudio: livekitStartAudio,
+        setMicrophoneEnabled: livekitSetMicrophoneEnabled,
     } = useLiveKitVoiceClient({
         roomId,
         socket,
         joined: voiceJoined,
         mediaStream: voiceMediaStream,
     });
+
+    /**
+     * Handler para toggle de mute que orquesta LiveKit + Socket.IO.
+     * 
+     * El patrón correcto es:
+     * 1. Primero, mutear/desmutear el track real en LiveKit (setMicrophoneEnabled)
+     * 2. Luego, emitir el estado a Socket.IO para sincronizar UI con otros participantes
+     * 
+     * Esto garantiza que el audio real se detenga ANTES de actualizar el estado social.
+     */
+    const handleToggleMute = useCallback(async () => {
+        // Calcular el nuevo estado de mute (inverso del actual)
+        const newMuted = !voiceMuted;
+        
+        console.log("[RoomPage] handleToggleMute", { 
+            currentMuted: voiceMuted, 
+            newMuted,
+            livekitConnected,
+        });
+
+        // 1. Primero mutear/desmutear en LiveKit (media real)
+        // setMicrophoneEnabled(true) = mic activo (no muted)
+        // setMicrophoneEnabled(false) = mic silenciado (muted)
+        if (livekitConnected) {
+            await livekitSetMicrophoneEnabled(!newMuted);
+        }
+
+        // 2. Luego emitir estado a Socket.IO (señalización/UI)
+        toggleMute();
+    }, [voiceMuted, livekitConnected, livekitSetMicrophoneEnabled, toggleMute]);
 
     const {
         members,
@@ -515,7 +546,7 @@ export default function RoomPage() {
                             voiceError={voiceErrorState}
                             onJoin={joinVoice}
                             onLeave={leaveVoice}
-                            onToggleMute={toggleMute}
+                            onToggleMute={handleToggleMute}
                             enableVoice={enableVoice}
                             enableVoiceMedia={enableVoiceMedia}
                             mediaEnabled={voiceMediaEnabled}
